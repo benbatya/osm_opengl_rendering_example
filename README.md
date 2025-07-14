@@ -26,6 +26,12 @@ OpenGL tutorials require OpenGL development package on Linux (Windows and Mac sh
 sudo apt install libglu1-mesa-dev
 ```
 
+On Fedora:
+
+```sh
+sudo dnf install gtk3-devel mesa-libGLU-devel
+```
+
 ## Building
 
 To build the project, use:
