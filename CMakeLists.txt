@@ -34,6 +34,32 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(wxWidgets)
 
+message(STATUS "Fetching required Boost modules...")
+
+fetchcontent_declare(
+    BoostIterator GIT_REPOSITORY https://github.com/boostorg/iterator.git
+    GIT_SHALLOW ON
+)
+fetchcontent_declare(
+    BoostVariant GIT_REPOSITORY https://github.com/boostorg/variant.git
+    GIT_SHALLOW ON
+)
+fetchcontent_makeavailable(BoostIterator BoostVariant)
+
+message(STATUS "Fetching libosmium...")
+
+FetchContent_Declare(
+  libosmium
+  GIT_REPOSITORY https://github.com/osmcode/libosmium.git
+  GIT_SHALLOW ON
+)
+## Ensure libosmium's own CMake module files (e.g. FindOsmium.cmake)
+## are available via CMAKE_MODULE_PATH before configuring the subproject.
+FetchContent_Populate(libosmium)
+list(APPEND CMAKE_MODULE_PATH "${libosmium_SOURCE_DIR}/cmake")
+FetchContent_MakeAvailable(libosmium)
+
+
 set(SRCS src/main.cpp src/openglcanvas.cpp)
 
 if(APPLE)
