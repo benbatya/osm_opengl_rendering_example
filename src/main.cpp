@@ -132,10 +132,6 @@ void MyFrame::BuildShaderProgram()
             logTextCtrl->SetValue("Shader failed to compile.\n" + openGLCanvas->GetShaderBuildLog());
         }
     }
-
-    // openGLCanvas->CompileCustomFragmentShader(
-    // textCtrl->GetText().ToStdString());
-    // logTextCtrl->SetValue(openGLCanvas->GetShaderBuildLog());
 }
 
 wxFont GetMonospacedFont(wxFontInfo&& fontInfo)
