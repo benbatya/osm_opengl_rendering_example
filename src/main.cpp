@@ -20,23 +20,24 @@ public:
     bool OnCmdLineParsed(wxCmdLineParser& parser) wxOVERRIDE;
 
     wxString scriptFilePath_ {};
+    wxString osmDataFilePath_ {};
 };
 
 class MyFrame : public wxFrame {
 public:
-    MyFrame(const wxString& title, const wxString& scriptFilePath);
+    MyFrame(const wxString& title);
+    bool initialize(const wxString& scriptFilePath, const wxString& osmDataFilePath);
 
 protected:
     OpenGLCanvas* openGLCanvas { nullptr };
     wxTextCtrl* logTextCtrl { nullptr };
 
     wxString scriptFilePath_ {};
-
-    OSMLoader osmLoader_;
+    wxString osmDataFilePath_ {};
 
     void OnOpenGLInitialized(wxCommandEvent& event);
 
-    void BuildShaderProgram();
+    bool BuildShaderProgram();
     void StylizeTextCtrl();
 
     void OnSize(wxSizeEvent& event);
@@ -49,7 +50,10 @@ bool MyApp::OnInit()
     if (!wxApp::OnInit())
         return false;
 
-    MyFrame* frame = new MyFrame("Hello OpenGL", scriptFilePath_);
+    MyFrame* frame = new MyFrame("Hello OpenGL");
+    if (!frame->initialize(scriptFilePath_, osmDataFilePath_)) {
+        return false;
+    }
     frame->Show(true);
 
     return true;
@@ -80,50 +84,51 @@ bool MyApp::OnCmdLineParsed(wxCmdLineParser& parser)
     }
 
     if (parser.GetParamCount() > 1) {
-        // pass OSM data file to OSMLoader
-        wxString osmDataFilePath = parser.GetParam(1);
-        OSMLoader osmLoader;
-        osmLoader.setFilepath(osmDataFilePath.ToStdString());
-        if (!osmLoader.Count()) {
-            wxLogError("Failed to load OSM data from file: %s",
-                osmDataFilePath);
-            return false;
-        }
+        osmDataFilePath_ = parser.GetParam(1);
     }
 
     return true;
 }
 
-MyFrame::MyFrame(const wxString& title, const wxString& scriptFilePath)
+MyFrame::MyFrame(const wxString& title)
     : wxFrame(nullptr, wxID_ANY, title)
-    , scriptFilePath_(scriptFilePath)
 {
+}
+
+bool MyFrame::initialize(const wxString& scriptFilePath, const wxString& osmDataFilePath)
+{
+    scriptFilePath_ = scriptFilePath;
+    osmDataFilePath_ = osmDataFilePath;
+
     wxGLAttributes vAttrs;
     vAttrs.PlatformDefaults().Defaults().EndList();
 
-    if (wxGLCanvas::IsDisplaySupported(vAttrs)) {
-        wxSplitterWindow* mainSplitter = new wxSplitterWindow(
-            this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_LIVE_UPDATE);
-
-        logTextCtrl = new wxTextCtrl(mainSplitter, wxID_ANY, wxEmptyString, wxDefaultPosition,
-            wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY);
-
-        openGLCanvas = new OpenGLCanvas(mainSplitter, vAttrs);
-
-        this->Bind(wxEVT_OPENGL_INITIALIZED, &MyFrame::OnOpenGLInitialized,
-            this);
-
-        mainSplitter->SetSashGravity(1.0);
-        mainSplitter->SetMinimumPaneSize(FromDIP(10));
-        mainSplitter->SplitHorizontally(openGLCanvas, logTextCtrl, -FromDIP(20));
-
-        this->SetSize(FromDIP(wxSize(1200, 600)));
-        this->SetMinSize(FromDIP(wxSize(800, 400)));
-
-        this->Bind(wxEVT_SIZE, &MyFrame::OnSize, this);
+    if (!wxGLCanvas::IsDisplaySupported(vAttrs)) {
+        wxLogError("OpenGL display attributes not supported!");
+        return false;
     }
 
-    // osmLoader_.setFilepath();
+    wxSplitterWindow* mainSplitter = new wxSplitterWindow(
+        this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_LIVE_UPDATE);
+
+    logTextCtrl = new wxTextCtrl(mainSplitter, wxID_ANY, wxEmptyString, wxDefaultPosition,
+        wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY);
+
+    openGLCanvas = new OpenGLCanvas(mainSplitter, vAttrs);
+
+    this->Bind(wxEVT_OPENGL_INITIALIZED, &MyFrame::OnOpenGLInitialized,
+        this);
+
+    mainSplitter->SetSashGravity(1.0);
+    mainSplitter->SetMinimumPaneSize(FromDIP(10));
+    mainSplitter->SplitHorizontally(openGLCanvas, logTextCtrl, -FromDIP(20));
+
+    this->SetSize(FromDIP(wxSize(1200, 600)));
+    this->SetMinSize(FromDIP(wxSize(800, 400)));
+
+    this->Bind(wxEVT_SIZE, &MyFrame::OnSize, this);
+
+    return true;
 }
 
 void MyFrame::OnOpenGLInitialized(wxCommandEvent& event)
@@ -131,8 +136,17 @@ void MyFrame::OnOpenGLInitialized(wxCommandEvent& event)
     BuildShaderProgram();
 }
 
-void MyFrame::BuildShaderProgram()
+bool MyFrame::BuildShaderProgram()
 {
+    // pass OSM data file to OSMLoader
+    OSMLoader osmLoader;
+    osmLoader.setFilepath(osmDataFilePath_.ToStdString());
+    if (!osmLoader.Count()) {
+        wxLogError("Failed to load OSM data from file: %s",
+            osmDataFilePath_);
+        return false;
+    }
+
     // load shader from file
     assert(!scriptFilePath_.IsEmpty());
     wxFile file(scriptFilePath_);
@@ -149,8 +163,11 @@ void MyFrame::BuildShaderProgram()
             std::cerr << "Shader failed to compile." << std::endl;
             // std::cerr << openGLCanvas->GetShaderBuildLog() << std::endl;
             logTextCtrl->SetValue("Shader failed to compile.\n" + openGLCanvas->GetShaderBuildLog());
+            return false;
         }
     }
+
+    return true;
 }
 
 wxFont GetMonospacedFont(wxFontInfo&& fontInfo)
