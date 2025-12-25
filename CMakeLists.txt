@@ -59,6 +59,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(libexpat)
 
+message(STATUS "Fetching zlib...")
+
+# Set options before FetchContent_MakeAvailable()
+set(ZLIB_TEST OFF CACHE BOOL "" FORCE) # Disable tests to avoid potential build issues
+set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE) # Avoid installing zlib with your project
+
+FetchContent_Declare(
+    zlib-cmake
+    URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
+)
+
+FetchContent_MakeAvailable(zlib-cmake)
+
 message(STATUS "Fetching bzip2...")
 
 FetchContent_Declare(
@@ -120,4 +133,4 @@ target_include_directories(main PRIVATE ${glew_SOURCE_DIR}/include)
 target_include_directories(main PRIVATE ${libosmium_SOURCE_DIR}/include)
 target_include_directories(main PRIVATE ${protozero_SOURCE_DIR}/include)
 
-target_link_libraries(main PRIVATE wxcore wxstc wxgl glew_s expat::expat bz2)
+target_link_libraries(main PRIVATE wxcore wxstc wxgl glew_s expat::expat ZLIB::ZLIB bz2)

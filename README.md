@@ -35,7 +35,6 @@ sudo dnf install gtk3-devel mesa-libGLU-devel
 ## Adding dependencies
 
 Follow https://osmcode.org/libosmium/manual.html#dependencies to ensure that all of the necessary dependencies can be found.
-TODO: FetchContent zlib
 
 ## Building
 
