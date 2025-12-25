@@ -186,7 +186,7 @@ bool MyFrame::initialize(const wxString& scriptFilePath, const std::shared_ptr<O
 
     this->Bind(wxEVT_SIZE, &MyFrame::OnSize, this);
 
-    auto routes = osmLoader_->getRoutes({ { -122.46780, 37.84373 }, { -122.50035, 37.85918 } });
+    auto routes = osmLoader_->getRoutes({ { 37.84373, -122.46780 }, { 37.85918, -122.50035 } });
     std::cout << "Loaded " << routes.size() << " routes from OSM data." << std::endl;
 
     return true;
