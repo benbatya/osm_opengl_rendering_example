@@ -32,6 +32,11 @@ On Fedora:
 sudo dnf install gtk3-devel mesa-libGLU-devel
 ```
 
+## Adding dependencies
+
+Follow https://osmcode.org/libosmium/manual.html#dependencies to ensure that all of the necessary dependencies can be found.
+TODO: FetchContent zlib
+
 ## Building
 
 To build the project, use:
@@ -47,6 +52,8 @@ This will create a directory named `build` and create all build artifacts there.
 ```bash
 ./build/main script.glsl 
 ```
+
+
 
 ---
 Check out the blog for more! [www.onlyfastcode.com](https://www.onlyfastcode.com)
