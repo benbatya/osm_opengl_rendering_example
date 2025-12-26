@@ -86,6 +86,7 @@
       "future": "cpp",
       "thread": "cpp",
       "random": "cpp"
-    }
+    },
+    "editor.defaultFormatter": "xaver.clang-format"
   }
 }

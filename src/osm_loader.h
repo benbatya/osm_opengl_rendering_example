@@ -1,24 +1,32 @@
 #pragma once
 
+#include <osmium/osm/box.hpp>
+#include <osmium/osm/location.hpp>
+#include <osmium/osm/types.hpp>
+
 #include <string>
 #include <vector>
 class OSMLoader {
-public:
+  public:
     OSMLoader() = default;
 
-    void setFilepath(const std::string& filepath) { filepath_ = filepath; }
+    void setFilepath(const std::string &filepath) { filepath_ = filepath; }
     bool Count();
 
-    using Routes = std::vector<std::vector<std::pair<double, double>>>;
-    using Coordinate = std::pair<double, double>;
-    using CoordinateBounds = std::pair<Coordinate, Coordinate>;
+    // Using definition of Location:
+    // https://osmcode.org/libosmium/manual.html#locations
+    using Coordinate = osmium::Location;
+    using Routes =
+        std::unordered_map<osmium::object_id_type, std::vector<Coordinate>>;
+    using CoordinateBounds = osmium::Box;
     /**
      * Get routes within the specified coordinate bounds.
      * @param bounds The coordinate bounds (min and max coordinates).
-     * @return A vector of routes, where each route is represented as a vector of coordinates
+     * @return A vector of routes, where each route is represented as a vector
+     * of coordinates
      */
-    Routes getRoutes(const CoordinateBounds& bounds) const;
+    Routes getRoutes(const CoordinateBounds &bounds) const;
 
-protected:
-    std::string filepath_ {};
+  protected:
+    std::string filepath_{};
 };

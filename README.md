@@ -49,7 +49,7 @@ This will create a directory named `build` and create all build artifacts there.
 
 ## Running
 ```bash
-./build/main script.glsl 
+./build/main ./script.glsl ~/Downloads/map.osm
 ```
 
 

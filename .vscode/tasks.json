@@ -8,8 +8,13 @@
             "args": [
                 "--build",
                 "build",
-                "-j"
+                "-j8",
+                "--target",
+                "main"
             ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true

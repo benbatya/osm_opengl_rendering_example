@@ -1,3 +1,3 @@
-BasedOnStyle: WebKit
-NamespaceIndentation: All
+BasedOnStyle: LLVM
+NamespaceIndentation: None
 IndentWidth: 4
