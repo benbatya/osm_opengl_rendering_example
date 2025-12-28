@@ -2,27 +2,89 @@
 
 #include <shaders.h>
 
+#include <iostream>
+#include <sstream>
+#include <string>
+
 wxDEFINE_EVENT(wxEVT_OPENGL_INITIALIZED, wxCommandEvent);
 
-// constexpr auto VertexShaderSource = R"(#version 330 core
+// GL debug callback function used when KHR_debug is available. Logs
+// messages (skips notifications) through wxLogError and stderr for
+// high-severity messages.
+static void GLDebugCallbackFunc(GLenum source, GLenum type, GLuint id,
+                                GLenum severity, GLsizei length,
+                                const GLchar *message, const void *userParam) {
+    if (severity == GL_DEBUG_SEVERITY_NOTIFICATION) {
+        return;
+    }
 
-//     layout(location = 0) in vec3 inPosition;
+    std::ostringstream ss;
+    ss << "GL Debug (id=" << id << ") ";
 
-//     void main()
-//     {
-//         gl_Position = vec4(inPosition, 1.0);
-//     }
-// )";
+    switch (source) {
+    case GL_DEBUG_SOURCE_API:
+        ss << "source=API ";
+        break;
+    case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+        ss << "source=WindowSystem ";
+        break;
+    case GL_DEBUG_SOURCE_SHADER_COMPILER:
+        ss << "source=ShaderCompiler ";
+        break;
+    case GL_DEBUG_SOURCE_THIRD_PARTY:
+        ss << "source=ThirdParty ";
+        break;
+    case GL_DEBUG_SOURCE_APPLICATION:
+        ss << "source=Application ";
+        break;
+    case GL_DEBUG_SOURCE_OTHER:
+    default:
+        ss << "source=Other ";
+        break;
+    }
 
-// constexpr auto FragmentShaderPrefix = R"(#version 330 core
+    switch (type) {
+    case GL_DEBUG_TYPE_ERROR:
+        ss << "type=Error ";
+        break;
+    case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+        ss << "type=DeprecatedBehavior ";
+        break;
+    case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+        ss << "type=UndefinedBehavior ";
+        break;
+    case GL_DEBUG_TYPE_PORTABILITY:
+        ss << "type=Portability ";
+        break;
+    case GL_DEBUG_TYPE_PERFORMANCE:
+        ss << "type=Performance ";
+        break;
+    case GL_DEBUG_TYPE_OTHER:
+    default:
+        ss << "type=Other ";
+        break;
+    }
 
-//     // layout(location = 0) in  fragColor;
+    switch (severity) {
+    case GL_DEBUG_SEVERITY_HIGH:
+        ss << "severity=HIGH ";
+        break;
+    case GL_DEBUG_SEVERITY_MEDIUM:
+        ss << "severity=MEDIUM ";
+        break;
+    case GL_DEBUG_SEVERITY_LOW:
+        ss << "severity=LOW ";
+        break;
+    case GL_DEBUG_SEVERITY_NOTIFICATION:
+    default:
+        ss << "severity=NOTIFICATION ";
+        break;
+    }
 
-//     uniform vec2 iResolution;
-//     uniform float iTime;
+    ss << "message=" << message;
 
-//     out vec4 FragColor;
-// )";
+    std::cerr << ss.str() << std::endl;
+}
 
 OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs)
     : wxGLCanvas(parent, canvasAttrs) {
@@ -103,6 +165,21 @@ bool OpenGLCanvas::InitializeOpenGL() {
     wxLogDebug("OpenGL vendor: %s",
                reinterpret_cast<const char *>(glGetString(GL_VENDOR)));
 
+    // Setup GL debug callback if available (KHR_debug)
+    if (GLEW_KHR_debug) {
+        glEnable(GL_DEBUG_OUTPUT);
+        glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+
+        glDebugMessageCallback(GLDebugCallbackFunc, this);
+
+        // Enable all messages (you can filter with glDebugMessageControl)
+        glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0,
+                              nullptr, GL_TRUE);
+        wxLogDebug("KHR_debug is available: GL debug output enabled");
+    } else {
+        wxLogDebug("KHR_debug not available; GL debug output disabled");
+    }
+
     CompileShaderProgram();
 
     // From
@@ -115,7 +192,7 @@ bool OpenGLCanvas::InitializeOpenGL() {
         0.5f,  0.5f,  0.0f, 0.0f, 1.0f, // top-right
         0.5f,  -0.5f, 1.0f, 1.0f, 0.0f, // bottom-right
     };
-    GLuint indices[] = {0, 1, 2, 3};
+    GLuint indices[] = {0, 0, 1, 2, 3, 0, 0};
 
     // store element count so draw code doesn't need a hardcoded value
     elementCount_ = static_cast<GLsizei>(sizeof(indices) / sizeof(indices[0]));
