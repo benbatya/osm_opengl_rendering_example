@@ -135,9 +135,9 @@ struct NodeWayMapper : public osmium::handler::Handler {
     NodeWayMapper() = default;
 
     void way(const osmium::Way &way) noexcept {
-        // filter out ways which are not tagged as surface="asphalt"
-        auto val = way.tags().get_value_by_key("surface");
-        if (!val || std::string(val) != "asphalt") {
+        // filter out ways which are not tagged as highway
+        auto val = way.tags().get_value_by_key("highway");
+        if (!val) {
             return;
         }
 
