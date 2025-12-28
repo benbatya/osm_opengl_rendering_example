@@ -12,7 +12,7 @@ void build_segment(vec4 position, vec3 color, vec4 position2, vec3 color2)
 {    
   // calculate the normalized direction from position to position2
   vec2 direction = normalize(position2.xy - position.xy);
-  vec2 perp2 = vec2(direction.y, -direction.x) * 0.02;
+  vec2 perp2 = vec2(direction.y, -direction.x) * 0.005;
   vec4 perp = vec4(perp2, 0.0, 0.0);
 
     fColor = color; // gs_in[0] since there's only one input vertex
