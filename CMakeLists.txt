@@ -135,27 +135,33 @@ target_include_directories(main PRIVATE ${protozero_SOURCE_DIR}/include)
 
 target_link_libraries(main PRIVATE wxcore wxstc wxgl glew_s expat::expat ZLIB::ZLIB bz2)
 
-# Stringify shaders
-# Define the function
-function(stringify_shader VS_FILE GS_FILE FS_FILE)
+function(stringify_shaders VS_FILE GS_FILE FS_FILE)
 
-    file(READ "${VS_FILE}" VERTEX_SHADER)
-    file(READ "${GS_FILE}" GEOMETRY_SHADER)
-    file(READ "${FS_FILE}" FRAGMENT_SHADER)
+  # Define the input file and the desired output file
+  set(CONFIG_IN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/shaders.h.in")
+  set(CONFIG_OUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/shaders.h")
 
-    # Run configure_file
-    # The @ONLY option ensures only @VAR@ syntax is expanded, not ${VAR}
-    configure_file(
-        "${CMAKE_SOURCE_DIR}/shaders/shaders.h.in"
-        "${CMAKE_BINARY_DIR}/shaders.h"
-        @ONLY
-    )
+  # Add a custom command to generate the file
+  add_custom_command(
+      OUTPUT ${CONFIG_OUT_FILE}
+      COMMAND ${CMAKE_COMMAND} -DVS_FILE=${VS_FILE} -DGS_FILE=${GS_FILE} -DFS_FILE=${FS_FILE} -DIN_FILE=${CONFIG_IN_FILE} -DOUT_FILE=${CONFIG_OUT_FILE} -P ${CMAKE_CURRENT_SOURCE_DIR}/generate_shaders.cmake
+      DEPENDS ${CONFIG_IN_FILE} ${VS_FILE} ${GS_FILE} ${FS_FILE}
+      COMMENT "Generating shaders.h file..."
+  )
+    
+  # Add the generated file to a target's sources to ensure it's built
+  list(APPEND SRCS ${CONFIG_OUT_FILE})
 
-    # Add the binary directory as an include directory for the target
-    target_include_directories(main PRIVATE "${CMAKE_BINARY_DIR}")
+  # Ensure the custom command runs before compilation
+  add_dependencies(main generated_config_target)
+
+  add_custom_target(generated_config_target DEPENDS ${CONFIG_OUT_FILE})
+
+  # Add the binary directory as an include directory for the target
+  target_include_directories(main PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 endfunction()
 
-stringify_shader(
+stringify_shaders(
     "${CMAKE_SOURCE_DIR}/shaders/house_shader.vs"
     "${CMAKE_SOURCE_DIR}/shaders/house_shader.gs"
     "${CMAKE_SOURCE_DIR}/shaders/house_shader.fs"
