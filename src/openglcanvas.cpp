@@ -103,31 +103,18 @@ bool OpenGLCanvas::InitializeOpenGL() {
 
     CompileShaderProgram();
 
-    // GLfloat quadVertices[] = {
-    //     -1.0f, -1.0f, 0.0f, // Bottom-left vertex
-    //     1.0f,  -1.0f, 0.0f, // Bottom-right vertex
-    //     -1.0f, 1.0f,  0.0f, // Top-left vertex
-    //     1.0f,  1.0f,  0.0f  // Top-right vertex
-    // };
-    // GLuint quadVBO, quadVAO;
-    // glGenVertexArrays(1, &quadVAO);
-    // glGenBuffers(1, &quadVBO);
-
-    // glBindVertexArray(quadVAO);
-    // glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-    // glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices,
-    //              GL_STATIC_DRAW);
-    // glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat),
-    //                       (void *)0);
-    // glEnableVertexAttribArray(0);
-
+    // From
+    // https://github.com/JoeyDeVries/LearnOpenGL/tree/master/src/4.advanced_opengl/9.1.geometry_shader_houses
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     GLfloat points[] = {
-        -0.5f, 0.5f,  1.0f, 0.0f, 0.0f, // top-left
-        0.5f,  0.5f,  0.0f, 1.0f, 0.0f, // top-right
-        0.5f,  -0.5f, 0.0f, 0.0f, 1.0f, // bottom-right
-        -0.5f, -0.5f, 1.0f, 1.0f, 0.0f  // bottom-left
+        -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, // bottom-left dummy
+        -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, // bottom-left
+        -0.5f, 0.5f,  0.0f, 1.0f, 0.0f, // top-left
+        0.5f,  0.5f,  0.0f, 0.0f, 1.0f, // top-right
+        0.5f,  -0.5f, 1.0f, 1.0f, 0.0f, // bottom-right
+        0.5f,  -0.5f, 1.0f, 1.0f, 0.0f  // bottom-right dummy
+
     };
     glGenBuffers(1, &VBO_);
     glGenVertexArrays(1, &VAO_);
@@ -164,27 +151,14 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
 
     SetCurrent(*openGLContext);
 
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClearColor(0.968f, 0.968f, 0.968f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (shaderProgram.shaderProgram.has_value()) {
         glUseProgram(shaderProgram.shaderProgram.value());
 
-        // auto viewPortSize = GetSize() * GetContentScaleFactor();
-
-        // glUniform2f(glGetUniformLocation(shaderProgram.shaderProgram.value(),
-        //                                  "iResolution"),
-        //             static_cast<float>(viewPortSize.x),
-        //             static_cast<float>(viewPortSize.y));
-
-        // glUniform1f(
-        //     glGetUniformLocation(shaderProgram.shaderProgram.value(),
-        //     "iTime"), elapsedSeconds);
-
-        // glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-
         glBindVertexArray(VAO_);
-        glDrawArrays(GL_LINE_STRIP_ADJACENCY, 0, 4);
+        glDrawArrays(GL_LINE_STRIP_ADJACENCY, 0, 7);
     }
     SwapBuffers();
 }
