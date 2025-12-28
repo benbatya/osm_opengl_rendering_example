@@ -189,9 +189,9 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
             // color: simple dark gray for now
             vertices.push_back(x);
             vertices.push_back(y);
-            vertices.push_back(0.2f);
-            vertices.push_back(0.2f);
-            vertices.push_back(0.2f);
+            vertices.push_back(0.3f);
+            vertices.push_back(0.3f);
+            vertices.push_back(0.3f);
         }
 
         // indices for GL_LINE_STRIP_ADJACENCY: duplicate first and last
