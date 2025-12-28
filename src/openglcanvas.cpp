@@ -1,26 +1,28 @@
 #include "openglcanvas.h"
 
+#include <shaders.h>
+
 wxDEFINE_EVENT(wxEVT_OPENGL_INITIALIZED, wxCommandEvent);
 
-constexpr auto VertexShaderSource = R"(#version 330 core
+// constexpr auto VertexShaderSource = R"(#version 330 core
 
-    layout(location = 0) in vec3 inPosition;
+//     layout(location = 0) in vec3 inPosition;
 
-    void main()
-    {
-        gl_Position = vec4(inPosition, 1.0);
-    }
-)";
+//     void main()
+//     {
+//         gl_Position = vec4(inPosition, 1.0);
+//     }
+// )";
 
-constexpr auto FragmentShaderPrefix = R"(#version 330 core
+// constexpr auto FragmentShaderPrefix = R"(#version 330 core
 
-    // layout(location = 0) in  fragColor;
+//     // layout(location = 0) in  fragColor;
 
-    uniform vec2 iResolution;
-    uniform float iTime;
+//     uniform vec2 iResolution;
+//     uniform float iTime;
 
-    out vec4 FragColor;
-)";
+//     out vec4 FragColor;
+// )";
 
 OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs)
     : wxGLCanvas(parent, canvasAttrs) {
@@ -45,15 +47,25 @@ OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs)
     timer.Start(1000 / FPS);
 }
 
-void OpenGLCanvas::CompileCustomFragmentShader(
-    const std::string &customFragmentShaderSource) {
-    shaderProgram.vertexShaderSource = std::string(VertexShaderSource);
-    shaderProgram.fragmentShaderSource =
-        FragmentShaderPrefix + customFragmentShaderSource;
+void OpenGLCanvas::CompileShaderProgram() {
+    shaderProgram.vertexShaderSource = VertexShader;
+    shaderProgram.geometryShaderSource = GeometryShader;
+    shaderProgram.fragmentShaderSource = FragmentShader;
     shaderProgram.Build();
+
+    if (!GetShaderBuildLog().empty()) {
+        std::cerr << "Shader failed to compile." << std::endl;
+        std::cerr << GetShaderBuildLog() << std::endl;
+        throw std::runtime_error("Shader compilation error");
+    }
 }
 
-OpenGLCanvas::~OpenGLCanvas() { delete openGLContext; }
+OpenGLCanvas::~OpenGLCanvas() {
+    glDeleteVertexArrays(1, &VAO_);
+    glDeleteBuffers(1, &VBO_);
+
+    delete openGLContext;
+}
 
 bool OpenGLCanvas::InitializeOpenGLFunctions() {
     GLenum err = glewInit();
@@ -89,24 +101,49 @@ bool OpenGLCanvas::InitializeOpenGL() {
     wxLogDebug("OpenGL vendor: %s",
                reinterpret_cast<const char *>(glGetString(GL_VENDOR)));
 
-    GLfloat quadVertices[] = {
-        -1.0f, -1.0f, 0.0f, // Bottom-left vertex
-        1.0f,  -1.0f, 0.0f, // Bottom-right vertex
-        -1.0f, 1.0f,  0.0f, // Top-left vertex
-        1.0f,  1.0f,  0.0f  // Top-right vertex
+    CompileShaderProgram();
+
+    // GLfloat quadVertices[] = {
+    //     -1.0f, -1.0f, 0.0f, // Bottom-left vertex
+    //     1.0f,  -1.0f, 0.0f, // Bottom-right vertex
+    //     -1.0f, 1.0f,  0.0f, // Top-left vertex
+    //     1.0f,  1.0f,  0.0f  // Top-right vertex
+    // };
+    // GLuint quadVBO, quadVAO;
+    // glGenVertexArrays(1, &quadVAO);
+    // glGenBuffers(1, &quadVBO);
+
+    // glBindVertexArray(quadVAO);
+    // glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    // glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices,
+    //              GL_STATIC_DRAW);
+    // glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat),
+    //                       (void *)0);
+    // glEnableVertexAttribArray(0);
+
+    // set up vertex data (and buffer(s)) and configure vertex attributes
+    // ------------------------------------------------------------------
+    GLfloat points[] = {
+        -0.5f, 0.5f,  1.0f, 0.0f, 0.0f, // top-left
+        0.5f,  0.5f,  0.0f, 1.0f, 0.0f, // top-right
+        0.5f,  -0.5f, 0.0f, 0.0f, 1.0f, // bottom-right
+        -0.5f, -0.5f, 1.0f, 1.0f, 0.0f  // bottom-left
     };
+    glGenBuffers(1, &VBO_);
+    glGenVertexArrays(1, &VAO_);
 
-    GLuint quadVBO, quadVAO;
-    glGenVertexArrays(1, &quadVAO);
-    glGenBuffers(1, &quadVBO);
+    glBindVertexArray(VAO_);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_);
 
-    glBindVertexArray(quadVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices,
-                 GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat),
-                          (void *)0);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(points), &points, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float),
+                          (void *)(2 * sizeof(float)));
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 
     isOpenGLInitialized = true;
     openGLInitializationTime = std::chrono::high_resolution_clock::now();
@@ -127,29 +164,27 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
 
     SetCurrent(*openGLContext);
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-    GLint depthFuncValue;
-    glGetIntegerv(GL_DEPTH_FUNC, &depthFuncValue);
-    glClearDepth(depthFuncValue == GL_LESS ? 1.0f : 0.0f);
-
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (shaderProgram.shaderProgram.has_value()) {
         glUseProgram(shaderProgram.shaderProgram.value());
 
-        auto viewPortSize = GetSize() * GetContentScaleFactor();
+        // auto viewPortSize = GetSize() * GetContentScaleFactor();
 
-        glUniform2f(glGetUniformLocation(shaderProgram.shaderProgram.value(),
-                                         "iResolution"),
-                    static_cast<float>(viewPortSize.x),
-                    static_cast<float>(viewPortSize.y));
+        // glUniform2f(glGetUniformLocation(shaderProgram.shaderProgram.value(),
+        //                                  "iResolution"),
+        //             static_cast<float>(viewPortSize.x),
+        //             static_cast<float>(viewPortSize.y));
 
-        glUniform1f(
-            glGetUniformLocation(shaderProgram.shaderProgram.value(), "iTime"),
-            elapsedSeconds);
+        // glUniform1f(
+        //     glGetUniformLocation(shaderProgram.shaderProgram.value(),
+        //     "iTime"), elapsedSeconds);
 
-        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        // glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+        glBindVertexArray(VAO_);
+        glDrawArrays(GL_POINTS, 0, 4);
     }
     SwapBuffers();
 }

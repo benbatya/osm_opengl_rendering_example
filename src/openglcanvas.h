@@ -11,35 +11,38 @@
 wxDECLARE_EVENT(wxEVT_OPENGL_INITIALIZED, wxCommandEvent);
 
 class OpenGLCanvas : public wxGLCanvas {
-public:
-    OpenGLCanvas(wxWindow* parent, const wxGLAttributes& canvasAttrs);
+  public:
+    OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs);
     ~OpenGLCanvas();
 
     bool InitializeOpenGL();
 
     bool IsOpenGLInitialized() const { return isOpenGLInitialized; }
 
-    void OnPaint(wxPaintEvent& event);
-    void OnSize(wxSizeEvent& event);
+    void OnPaint(wxPaintEvent &event);
+    void OnSize(wxSizeEvent &event);
 
-    void OnTimer(wxTimerEvent& event);
+    void OnTimer(wxTimerEvent &event);
 
-    void CompileCustomFragmentShader(const std::string& fragmentShaderSource);
+  protected:
+    void CompileShaderProgram();
 
-    std::string GetShaderBuildLog() const
-    {
+    std::string GetShaderBuildLog() const {
         return shaderProgram.lastBuildLog.str();
     }
 
-private:
+  private:
     bool InitializeOpenGLFunctions();
 
-    wxGLContext* openGLContext;
-    bool isOpenGLInitialized { false };
+    wxGLContext *openGLContext;
+    bool isOpenGLInitialized{false};
 
-    ShaderProgram shaderProgram {};
+    ShaderProgram shaderProgram{};
 
     wxTimer timer;
-    std::chrono::high_resolution_clock::time_point openGLInitializationTime {};
-    float elapsedSeconds { 0.0f };
+    std::chrono::high_resolution_clock::time_point openGLInitializationTime{};
+    float elapsedSeconds{0.0f};
+
+    GLuint VAO_{0};
+    GLuint VBO_{0};
 };

@@ -8,16 +8,24 @@
 
 struct ShaderProgram {
 
-    void Build()
-    {
+    void Build() {
         lastBuildLog = {};
 
-        unsigned int vertexShader = CompileShader(GL_VERTEX_SHADER, vertexShaderSource.c_str());
-        unsigned int fragmentShader = CompileShader(GL_FRAGMENT_SHADER, fragmentShaderSource.c_str());
+        unsigned int vertexShader =
+            CompileShader(GL_VERTEX_SHADER, vertexShaderSource.c_str());
+        unsigned int fragmentShader =
+            CompileShader(GL_FRAGMENT_SHADER, fragmentShaderSource.c_str());
 
         shaderProgram = glCreateProgram();
         glAttachShader(shaderProgram.value(), vertexShader);
         glAttachShader(shaderProgram.value(), fragmentShader);
+
+        unsigned int geometryShader = 0;
+        if (geometryShaderSource.size() > 0) {
+            geometryShader =
+                CompileShader(GL_GEOMETRY_SHADER, geometryShaderSource.c_str());
+            glAttachShader(shaderProgram.value(), geometryShader);
+        }
 
         glLinkProgram(shaderProgram.value());
 
@@ -34,11 +42,14 @@ struct ShaderProgram {
 
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
+
+        if (geometryShaderSource.size() > 0) {
+            glDeleteShader(geometryShader);
+        }
     }
 
     unsigned int CompileShader(unsigned int shaderType,
-        const char* shaderSource)
-    {
+                               const char *shaderSource) {
         unsigned int shader = glCreateShader(shaderType);
         glShaderSource(shader, 1, &shaderSource, nullptr);
         glCompileShader(shader);
@@ -57,8 +68,9 @@ struct ShaderProgram {
 
     std::optional<unsigned int> shaderProgram = std::nullopt;
 
-    std::string vertexShaderSource;
-    std::string fragmentShaderSource;
+    std::string vertexShaderSource{};
+    std::string geometryShaderSource{};
+    std::string fragmentShaderSource{};
 
     std::stringstream lastBuildLog;
 };

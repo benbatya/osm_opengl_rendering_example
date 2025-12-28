@@ -1,0 +1,5 @@
+#pragma once
+
+constexpr auto VertexShader = R"(@VERTEX_SHADER@)";
+constexpr auto GeometryShader = R"(@GEOMETRY_SHADER@)";
+constexpr auto FragmentShader = R"(@FRAGMENT_SHADER@)";

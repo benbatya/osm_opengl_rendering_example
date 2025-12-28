@@ -134,3 +134,29 @@ target_include_directories(main PRIVATE ${libosmium_SOURCE_DIR}/include)
 target_include_directories(main PRIVATE ${protozero_SOURCE_DIR}/include)
 
 target_link_libraries(main PRIVATE wxcore wxstc wxgl glew_s expat::expat ZLIB::ZLIB bz2)
+
+# Stringify shaders
+# Define the function
+function(stringify_shader VS_FILE GS_FILE FS_FILE)
+
+    file(READ "${VS_FILE}" VERTEX_SHADER)
+    file(READ "${GS_FILE}" GEOMETRY_SHADER)
+    file(READ "${FS_FILE}" FRAGMENT_SHADER)
+
+    # Run configure_file
+    # The @ONLY option ensures only @VAR@ syntax is expanded, not ${VAR}
+    configure_file(
+        "${CMAKE_SOURCE_DIR}/shaders/shaders.h.in"
+        "${CMAKE_BINARY_DIR}/shaders.h"
+        @ONLY
+    )
+
+    # Add the binary directory as an include directory for the target
+    target_include_directories(main PRIVATE "${CMAKE_BINARY_DIR}")
+endfunction()
+
+stringify_shader(
+    "${CMAKE_SOURCE_DIR}/shaders/house_shader.vs"
+    "${CMAKE_SOURCE_DIR}/shaders/house_shader.gs"
+    "${CMAKE_SOURCE_DIR}/shaders/house_shader.fs"
+)

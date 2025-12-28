@@ -24,13 +24,9 @@ class MyApp : public wxApp {
     bool OnInit() wxOVERRIDE;
     void OnInitCmdLine(wxCmdLineParser &parser) wxOVERRIDE;
     bool OnCmdLineParsed(wxCmdLineParser &parser) wxOVERRIDE;
-    void OnEventLoopEnter(wxEventLoopBase *loop) wxOVERRIDE;
-    void OnFileSystemEvent(wxFileSystemWatcherEvent &event);
 
   protected:
-    wxString scriptFilePath_{};
     wxString osmDataFilePath_{};
-    std::unique_ptr<wxFileSystemWatcher> fileWatcher_{nullptr};
     MyFrame *frame_{nullptr};
     std::shared_ptr<OSMLoader> osmLoader_{nullptr};
 };
@@ -38,8 +34,7 @@ class MyApp : public wxApp {
 class MyFrame : public wxFrame {
   public:
     MyFrame(const wxString &title);
-    bool initialize(const wxString &scriptFilePath,
-                    const std::shared_ptr<OSMLoader> &osmLoader);
+    bool initialize(const std::shared_ptr<OSMLoader> &osmLoader);
     bool BuildShaderProgram();
 
   protected:
@@ -48,9 +43,7 @@ class MyFrame : public wxFrame {
     void OnSize(wxSizeEvent &event);
 
     OpenGLCanvas *openGLCanvas{nullptr};
-    wxTextCtrl *logTextCtrl{nullptr};
 
-    wxString scriptFilePath_{};
     std::shared_ptr<OSMLoader> osmLoader_{nullptr};
 };
 
@@ -62,14 +55,9 @@ bool MyApp::OnInit() {
 
     osmLoader_ = std::make_shared<OSMLoader>();
     osmLoader_->setFilepath(osmDataFilePath_.ToStdString());
-    // if (!osmLoader_->Count()) {
-    //     wxLogError("Failed to load OSM data from file: %s",
-    //         osmDataFilePath_);
-    //     return false;
-    // }
 
     frame_ = new MyFrame("Hello OpenGL");
-    if (!frame_->initialize(scriptFilePath_, osmLoader_)) {
+    if (!frame_->initialize(osmLoader_)) {
         return false;
     }
     frame_->Show(true);
@@ -81,8 +69,6 @@ void MyApp::OnInitCmdLine(wxCmdLineParser &parser) {
     wxApp::OnInitCmdLine(parser);
 
     static const wxCmdLineEntryDesc cmdLineDesc[] = {
-        {wxCMD_LINE_PARAM, NULL, NULL, "Input script file to watch",
-         wxCMD_LINE_VAL_STRING},
         {wxCMD_LINE_PARAM, NULL, NULL, "Input OSM datafile",
          wxCMD_LINE_VAL_STRING},
         {wxCMD_LINE_NONE}};
@@ -95,61 +81,17 @@ bool MyApp::OnCmdLineParsed(wxCmdLineParser &parser) {
         return false;
 
     if (parser.GetParamCount() > 0) {
-        scriptFilePath_ = parser.GetParam(0);
+        osmDataFilePath_ = parser.GetParam(0);
     } else {
         return false;
-    }
-
-    if (parser.GetParamCount() > 1) {
-        osmDataFilePath_ = parser.GetParam(1);
     }
 
     return true;
 }
 
-void MyApp::OnEventLoopEnter(wxEventLoopBase *loop) {
-    wxApp::OnEventLoopEnter(loop);
-    std::cout << "Event loop entered: " << loop << std::endl;
-
-    if (!loop) {
-        fileWatcher_.reset();
-        return;
-    }
-
-    if (scriptFilePath_.IsEmpty()) {
-        return;
-    }
-
-    fileWatcher_ = std::make_unique<wxFileSystemWatcher>();
-    Bind(wxEVT_FSWATCHER, &MyApp::OnFileSystemEvent, this);
-    fileWatcher_->SetOwner(this);
-    fileWatcher_->Add(scriptFilePath_, wxFSW_EVENT_MODIFY);
-}
-
-void MyApp::OnFileSystemEvent(wxFileSystemWatcherEvent &event) {
-    wxString msg;
-    switch (event.GetChangeType()) {
-    case wxFSW_EVENT_MODIFY:
-        msg.Printf("File modified: %s", event.GetPath().GetFullPath());
-        frame_->BuildShaderProgram();
-        break;
-    case wxFSW_EVENT_CREATE:
-        msg.Printf("File created: %s", event.GetPath().GetFullPath());
-        break;
-    case wxFSW_EVENT_DELETE:
-        msg.Printf("File deleted: %s", event.GetPath().GetFullPath());
-        // scriptFilePath_.clear();
-        break;
-        // ... handle other event types
-    }
-    wxLogMessage(msg); // Log the event for the user
-}
-
 MyFrame::MyFrame(const wxString &title) : wxFrame(nullptr, wxID_ANY, title) {}
 
-bool MyFrame::initialize(const wxString &scriptFilePath,
-                         const std::shared_ptr<OSMLoader> &osmLoader) {
-    scriptFilePath_ = scriptFilePath;
+bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
     osmLoader_ = osmLoader;
 
     wxGLAttributes vAttrs;
@@ -160,20 +102,16 @@ bool MyFrame::initialize(const wxString &scriptFilePath,
         return false;
     }
 
-    wxSplitterWindow *mainSplitter = new wxSplitterWindow(
-        this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_LIVE_UPDATE);
+    // wxSplitterWindow *mainSplitter = new wxSplitterWindow(
+    //     this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxSP_LIVE_UPDATE);
 
-    logTextCtrl =
-        new wxTextCtrl(mainSplitter, wxID_ANY, wxEmptyString, wxDefaultPosition,
-                       wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY);
-
-    openGLCanvas = new OpenGLCanvas(mainSplitter, vAttrs);
+    openGLCanvas = new OpenGLCanvas(this, vAttrs);
 
     this->Bind(wxEVT_OPENGL_INITIALIZED, &MyFrame::OnOpenGLInitialized, this);
 
-    mainSplitter->SetSashGravity(1.0);
-    mainSplitter->SetMinimumPaneSize(FromDIP(10));
-    mainSplitter->SplitHorizontally(openGLCanvas, logTextCtrl, -FromDIP(20));
+    // mainSplitter->SetSashGravity(1.0);
+    // mainSplitter->SetMinimumPaneSize(FromDIP(10));
+    // mainSplitter->SplitHorizontally(openGLCanvas, nullptr, -FromDIP(20));
 
     this->SetSize(FromDIP(wxSize(1200, 600)));
     this->SetMinSize(FromDIP(wxSize(800, 400)));
@@ -188,33 +126,7 @@ bool MyFrame::initialize(const wxString &scriptFilePath,
     return true;
 }
 
-void MyFrame::OnOpenGLInitialized(wxCommandEvent &event) {
-    BuildShaderProgram();
-}
-
-bool MyFrame::BuildShaderProgram() {
-    // load shader from file
-    assert(!scriptFilePath_.IsEmpty());
-    wxFile file(scriptFilePath_);
-    if (file.IsOpened()) {
-        wxString fileContent;
-        file.ReadAll(&fileContent);
-        openGLCanvas->CompileCustomFragmentShader(fileContent.ToStdString());
-        // logTextCtrl->SetValue(openGLCanvas->GetShaderBuildLog());
-
-        if (openGLCanvas->GetShaderBuildLog().empty()) {
-            logTextCtrl->SetValue("Shader compiled successfully.");
-        } else {
-            std::cerr << "Shader failed to compile." << std::endl;
-            // std::cerr << openGLCanvas->GetShaderBuildLog() << std::endl;
-            logTextCtrl->SetValue("Shader failed to compile.\n" +
-                                  openGLCanvas->GetShaderBuildLog());
-            return false;
-        }
-    }
-
-    return true;
-}
+void MyFrame::OnOpenGLInitialized(wxCommandEvent &event) {}
 
 wxFont GetMonospacedFont(wxFontInfo &&fontInfo) {
     const wxString preferredFonts[] = {"Menlo", "Consolas", "Monaco",

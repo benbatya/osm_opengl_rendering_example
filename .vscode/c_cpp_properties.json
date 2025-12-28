@@ -40,6 +40,7 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/src/",
+                "${workspaceFolder}/build",
                 "${workspaceFolder}/build/_deps/wxwidgets-src/include/",
                 "${workspaceFolder}/build/_deps/glew-src/include/",
                 "${workspaceFolder}/build/_deps/wxwidgets-build/lib/wx/include/gtk3-unicode-static-3.2/",
