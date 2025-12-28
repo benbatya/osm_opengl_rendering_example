@@ -135,6 +135,12 @@ struct NodeWayMapper : public osmium::handler::Handler {
     NodeWayMapper() = default;
 
     void way(const osmium::Way &way) noexcept {
+        // filter out ways which are not tagged as surface="asphalt"
+        auto val = way.tags().get_value_by_key("surface");
+        if (!val || std::string(val) != "asphalt") {
+            return;
+        }
+
         for (const auto &node_ref : way.nodes()) {
             // Assume that we only get po
             assert(node_ref.ref() > 0);
