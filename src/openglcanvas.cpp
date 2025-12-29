@@ -118,12 +118,12 @@ void OpenGLCanvas::SetWays(const OSMLoader::Ways &routes,
     // Find the longest routes and store only those for testing
     storedWays_.clear();
 
-    const size_t NUM_WAYS = std::min(routes.size(), static_cast<size_t>(60));
+    const size_t NUM_WAYS = std::min(routes.size(), static_cast<size_t>(1));
 
     std::unordered_map<size_t, std::vector<osmium::object_id_type>> lenIdMap;
 
     for (const auto &route : routes) {
-        auto length = route.second.size();
+        auto length = route.second.nodes.size();
         lenIdMap[length].push_back(route.first);
     }
 
@@ -139,7 +139,8 @@ void OpenGLCanvas::SetWays(const OSMLoader::Ways &routes,
             if (count >= NUM_WAYS)
                 break;
             storedWays_[routeId] = routes.at(routeId);
-            std::cout << "Selected way ID " << routeId << " with length "
+            std::cout << "Selected way ID " << routeId << ", '"
+                      << storedWays_.at(routeId).name << "' with length "
                       << length << std::endl;
             ++count;
         }
@@ -191,13 +192,13 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     size_t indexOffset = 0;
     for (const auto &entry : storedWays_) {
         const auto &coords = entry.second;
-        if (coords.size() < 2)
+        if (coords.nodes.size() < 2)
             continue;
 
         GLuint base = static_cast<GLuint>(vertices.size() / 5);
 
         // vertices
-        for (const auto &loc : coords) {
+        for (const auto &loc : coords.nodes) {
             if (!loc.valid())
                 continue;
             double lon = loc.lon();

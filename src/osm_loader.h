@@ -16,7 +16,11 @@ class OSMLoader {
     // Using definition of Location:
     // https://osmcode.org/libosmium/manual.html#locations
     using Coordinate = osmium::Location;
-    using Way = std::vector<Coordinate>;
+    struct Way {
+        osmium::object_id_type id{0};
+        std::string name{};
+        std::vector<Coordinate> nodes;
+    };
     using Ways = std::unordered_map<osmium::object_id_type, Way>;
     using CoordinateBounds = osmium::Box;
     /**

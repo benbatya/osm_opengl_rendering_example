@@ -126,25 +126,36 @@ namespace {
 using NodeID = osmium::object_id_type;
 using WayIDs = std::unordered_set<osmium::object_id_type>;
 using NodeWaysMap = std::unordered_map<NodeID, WayIDs>;
+using WayNameMap = std::unordered_map<osmium::object_id_type, std::string>;
+struct MappedWayData {
+    NodeWaysMap nodeWaysMap;
+    WayNameMap wayNames;
+};
 
 struct NodeWayMapper : public osmium::handler::Handler {
     // Map of Node IDs -> Way IDs to be retrieved later
-    NodeWaysMap requestedNodes_{};
-    // TODO: save other way info if needed
+    // NodeWaysMap requestedNodes_{};
+    // WayNameMap wayNames_;
+    MappedWayData wayData_;
 
     NodeWayMapper() = default;
 
     void way(const osmium::Way &way) noexcept {
         // filter out ways which are not tagged as highway
-        auto val = way.tags().get_value_by_key("highway");
-        if (!val) {
+        auto tag_value = way.tags().get_value_by_key("highway");
+        if (!tag_value) {
             return;
+        }
+
+        tag_value = way.tags().get_value_by_key("name");
+        if (tag_value) {
+            wayData_.wayNames[way.id()] = tag_value;
         }
 
         for (const auto &node_ref : way.nodes()) {
             // Assume that we only get po
             assert(node_ref.ref() > 0);
-            auto &nodeList = requestedNodes_[node_ref.ref()];
+            auto &nodeList = wayData_.nodeWaysMap[node_ref.ref()];
             nodeList.insert(way.id());
         }
     }
@@ -153,12 +164,13 @@ struct NodeWayMapper : public osmium::handler::Handler {
 struct NodeReducer : public osmium::handler::Handler {
 
     const osmium::Box &bounds_;
-    const NodeWaysMap &nodeWaysMap_;
+    const MappedWayData &wayData_;
+
     OSMLoader::Ways &routes_;
 
-    NodeReducer(const osmium::Box &bounds, const NodeWaysMap &nodeWaysMap,
+    NodeReducer(const osmium::Box &bounds, const MappedWayData &wayData,
                 OSMLoader::Ways &routes)
-        : bounds_(bounds), nodeWaysMap_(nodeWaysMap), routes_(routes) {}
+        : bounds_(bounds), wayData_(wayData), routes_(routes) {}
 
     void node(const osmium::Node &node) noexcept {
         if (!node.location().valid()) {
@@ -170,14 +182,20 @@ struct NodeReducer : public osmium::handler::Handler {
             return;
         }
 
-        auto it = nodeWaysMap_.find(node.id());
-        if (it == nodeWaysMap_.end()) {
+        auto it = wayData_.nodeWaysMap.find(node.id());
+        if (it == wayData_.nodeWaysMap.end()) {
             return;
         }
         // This node is part of one or more requested ways
         for (const auto &wayID : it->second) {
             // Find or create the route for this wayID
-            routes_[wayID].push_back(node.location());
+            routes_[wayID].nodes.push_back(node.location());
+            routes_[wayID].id = wayID;
+            if (routes_[wayID].name.empty()) {
+                routes_[wayID].name = wayData_.wayNames.count(wayID) > 0
+                                          ? wayData_.wayNames.at(wayID)
+                                          : "";
+            }
         }
     }
 };
@@ -205,7 +223,7 @@ OSMLoader::Ways OSMLoader::getWays(const CoordinateBounds &bounds) const {
         // and build a buffer to hold them
         osmium::io::Reader nodeReader{input_file,
                                       osmium::osm_entity_bits::node};
-        NodeReducer reducer(bounds, wayHandler.requestedNodes_, routes);
+        NodeReducer reducer(bounds, wayHandler.wayData_, routes);
         osmium::apply(nodeReader, reducer);
         nodeReader.close();
 
