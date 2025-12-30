@@ -67,7 +67,9 @@ set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE) # Avoid installing zlib with your p
 
 FetchContent_Declare(
     zlib-cmake
-    URL https://github.com/jimmy-park/zlib-cmake/archive/main.tar.gz
+    GIT_REPOSITORY https://github.com/jimmy-park/zlib-cmake.git
+    GIT_TAG 1.3.1
+    GIT_SHALLOW ON
 )
 
 FetchContent_MakeAvailable(zlib-cmake)
@@ -129,11 +131,19 @@ endif()
 
 find_package(expat CONFIG REQUIRED)
 
+# Optimization: Enable Interprocedural Optimization (LTO) if supported
+include(CheckIPOSupported)
+check_ipo_supported(RESULT lto_supported OUTPUT error)
+
 target_include_directories(main PRIVATE ${glew_SOURCE_DIR}/include)
 target_include_directories(main PRIVATE ${libosmium_SOURCE_DIR}/include)
 target_include_directories(main PRIVATE ${protozero_SOURCE_DIR}/include)
 
 target_link_libraries(main PRIVATE wxcore wxstc wxgl glew_s expat::expat ZLIB::ZLIB bz2)
+
+if(lto_supported)
+    set_target_properties(main PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
 
 function(stringify_shaders VS_FILE GS_FILE FS_FILE)
 
