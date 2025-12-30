@@ -105,6 +105,9 @@ OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs)
 
     Bind(wxEVT_PAINT, &OpenGLCanvas::OnPaint, this);
     Bind(wxEVT_SIZE, &OpenGLCanvas::OnSize, this);
+    Bind(wxEVT_LEFT_DOWN, &OpenGLCanvas::OnLeftDown, this);
+    Bind(wxEVT_LEFT_UP, &OpenGLCanvas::OnLeftUp, this);
+    Bind(wxEVT_MOTION, &OpenGLCanvas::OnMouseMotion, this);
 
     // Bind mouse wheel events for zooming
     // Bind(wxEVT_MOUSEWHEEL, &OpenGLCanvas::OnMouseWheel, this);
@@ -528,6 +531,77 @@ void OpenGLCanvas::OnTimer(wxTimerEvent &WXUNUSED(event)) {
         elapsedSeconds = duration.count() / 1000.0f;
         Refresh(false);
     }
+}
+
+void OpenGLCanvas::OnLeftDown(wxMouseEvent &event) {
+    isDragging_ = true;
+    lastMousePos_ = event.GetPosition();
+    CaptureMouse();
+}
+
+void OpenGLCanvas::OnLeftUp(wxMouseEvent &event) {
+    if (isDragging_) {
+        isDragging_ = false;
+        if (HasCapture())
+            ReleaseMouse();
+    }
+}
+
+void OpenGLCanvas::OnMouseMotion(wxMouseEvent &event) {
+    if (!isDragging_)
+        return;
+
+    if (!event.Dragging() || !event.LeftIsDown())
+        return;
+
+    // compute pixel delta (use logical coordinates then account for content
+    // scale)
+    wxPoint pos = event.GetPosition();
+    // use content scale factor to match viewport used for GL
+    auto scale = GetContentScaleFactor();
+    wxPoint posScaled = pos * scale;
+    wxPoint lastScaled = lastMousePos_ * scale;
+
+    int dx = posScaled.x - lastScaled.x;
+    int dy = posScaled.y - lastScaled.y;
+
+    auto viewPortSize = GetClientSize() * scale;
+    if (viewPortSize.x <= 0 || viewPortSize.y <= 0) {
+        lastMousePos_ = pos;
+        return;
+    }
+
+    double minLon = bounds_.left();
+    double maxLon = bounds_.right();
+    double minLat = bounds_.bottom();
+    double maxLat = bounds_.top();
+
+    double lonRange = (maxLon - minLon);
+    double latRange = (maxLat - minLat);
+    if (lonRange == 0.0)
+        lonRange = 1.0;
+    if (latRange == 0.0)
+        latRange = 1.0;
+
+    double w = static_cast<double>(viewPortSize.x);
+    double h = static_cast<double>(viewPortSize.y);
+
+    // map pixel delta to world delta: lonOffset = -(dx/w)*lonRange
+    // and latOffset = (dy/h)*latRange (note y pixel increases downwards)
+    double lonOffset = -static_cast<double>(dx) / w * lonRange;
+    double latOffset = static_cast<double>(dy) / h * latRange;
+
+    double newMinLon = minLon + lonOffset;
+    double newMaxLon = maxLon + lonOffset;
+    double newMinLat = minLat + latOffset;
+    double newMaxLat = maxLat + latOffset;
+
+    bounds_ = osmium::Box({newMinLon, newMinLat}, {newMaxLon, newMaxLat});
+
+    lastMousePos_ = pos;
+
+    // just request redraw; shader reads `bounds_` uniform during paint
+    Refresh(false);
 }
 
 // void OpenGLCanvas::OnMouseWheel(wxMouseEvent &event) {
