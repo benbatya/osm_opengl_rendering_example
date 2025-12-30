@@ -138,7 +138,7 @@ target_link_libraries(main PRIVATE wxcore wxstc wxgl glew_s expat::expat ZLIB::Z
 function(stringify_shaders VS_FILE GS_FILE FS_FILE)
 
   # Define the input file and the desired output file
-  set(CONFIG_IN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/shaders/shaders.h.in")
+  set(CONFIG_IN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/shaders.h.in")
   set(CONFIG_OUT_FILE "${CMAKE_CURRENT_BINARY_DIR}/shaders.h")
 
   # Add a custom command to generate the file
@@ -162,7 +162,7 @@ function(stringify_shaders VS_FILE GS_FILE FS_FILE)
 endfunction()
 
 stringify_shaders(
-    "${CMAKE_SOURCE_DIR}/shaders/house_shader.vs"
-    "${CMAKE_SOURCE_DIR}/shaders/house_shader.gs"
-    "${CMAKE_SOURCE_DIR}/shaders/house_shader.fs"
+    "${CMAKE_SOURCE_DIR}/src/shaders/house_shader.vs"
+    "${CMAKE_SOURCE_DIR}/src/shaders/house_shader.gs"
+    "${CMAKE_SOURCE_DIR}/src/shaders/house_shader.fs"
 )
