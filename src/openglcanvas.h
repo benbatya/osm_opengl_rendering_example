@@ -29,7 +29,6 @@ class OpenGLCanvas : public wxGLCanvas {
     void OnLeftDown(wxMouseEvent &event);
     void OnLeftUp(wxMouseEvent &event);
     void OnMouseMotion(wxMouseEvent &event);
-
     void OnMouseWheel(wxMouseEvent &event);
 
     // Upload routes from OSMLoader into GPU buffers. This replaces the
@@ -43,6 +42,10 @@ class OpenGLCanvas : public wxGLCanvas {
 
   private:
     bool InitializeOpenGLFunctions();
+
+    // Update GPU buffers from `storedWays_` (called after GL init or when
+    // SetWays is invoked while GL is available).
+    void UpdateBuffersFromRoutes();
 
     wxGLContext *openGLContext_;
     bool isOpenGLInitialized_{false};
@@ -65,16 +68,14 @@ class OpenGLCanvas : public wxGLCanvas {
 
     // Coordinate bounds of viewport
     osmium::Box bounds_{};
-
-    // Mouse drag state for panning
-    bool isDragging_{false};
-    wxPoint lastMousePos_{0, 0};
     // Stored routes (kept so buffers can be uploaded after GL init)
     OSMLoader::Ways storedWays_{};
     // Draw commands: pair<count, byteOffsetInEBO>
     std::vector<std::pair<GLsizei, size_t>> drawCommands_{};
 
-    // Update GPU buffers from `storedWays_` (called after GL init or when
-    // SetWays is invoked while GL is available).
-    void UpdateBuffersFromRoutes();
+    // Event handling state
+    // Mouse drag state for panning
+    bool isDragging_{false};
+    wxPoint lastMousePos_{0, 0};
+    long prevEventTimestamp_{0};
 };

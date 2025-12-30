@@ -580,6 +580,13 @@ void OpenGLCanvas::OnMouseMotion(wxMouseEvent &event) {
 }
 
 void OpenGLCanvas::OnMouseWheel(wxMouseEvent &event) {
+    if (event.GetTimestamp() == 0 || event.GetTimestamp() == prevEventTimestamp_) {
+        // Ignore synthetic events with duplicate timestamps (e.g. generated on
+        // Windows when Alt key is pressed).
+        return;
+    }
+    prevEventTimestamp_ = event.GetTimestamp();
+
     // Use wheel rotation to compute zoom steps
     const int rotation = event.GetWheelRotation();
     const int delta = event.GetWheelDelta();
