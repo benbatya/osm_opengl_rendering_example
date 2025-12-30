@@ -1,4 +1,4 @@
-# wx_gl_shadertoy_tutorial
+# osm_opengl_rendering_example
 
 Renders OpenStreetMap (OSM) ways tagged as highways using OpenGL geometry shaders.
 
@@ -49,6 +49,10 @@ missing dependency errors, follow the libosmium dependency guide:
 https://osmcode.org/libosmium/manual.html#dependencies
 
 The repo already includes CPM-based dependency provisioning in the CMake configuration used during configure/build.
+
+## Export
+Goto https://www.openstreetmap.org/export#map=16/37.85146/-122.48406 and click "Export"
+This will save a file named map.osm to the Downloads/ folder.
 
 ## Build
 
