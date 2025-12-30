@@ -180,18 +180,16 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
         return;
     }
 
-    // // Compute bounds
-    double minLon = bounds_.left();
-    double maxLon = bounds_.right();
-    double minLat = bounds_.bottom();
-    double maxLat = bounds_.top();
-
-    double lonRange = (maxLon - minLon);
-    double latRange = (maxLat - minLat);
-    if (lonRange == 0.0)
-        lonRange = 1.0;
-    if (latRange == 0.0)
-        latRange = 1.0;
+    using FLOAT_VEC3 = std::array<GLfloat, 3>;
+    using MapType = std::unordered_map<std::string, FLOAT_VEC3>;
+    static MapType HIGHWAY2COLOR = {{"motorway", {1.0f, 0.35f, 0.35f}},   {"motorway_link", {1.0f, 0.6f, 0.6f}},
+                                    {"secondary", {1.0f, 0.75f, 0.4f}},   {"tertiary", {1.0f, 1.0f, 0.6f}},
+                                    {"residential", {1.0f, 1.0f, 1.0f}},  {"unclassified", {0.95f, 0.95f, 0.95f}},
+                                    {"service", {0.8f, 0.8f, 0.8f}},      {"track", {0.65f, 0.55f, 0.4f}},
+                                    {"pedestrian", {0.85f, 0.8f, 0.85f}}, {"footway", {0.9f, 0.7f, 0.7f}},
+                                    {"path", {0.6f, 0.7f, 0.6f}},         {"steps", {0.7f, 0.4f, 0.4f}},
+                                    {"platform", {0.6f, 0.6f, 0.8f}}};
+    FLOAT_VEC3 DEFAULT_COLOR = {0.5f, 0.5f, 0.5f};
 
     size_t indexOffset = 0;
     for (const auto &entry : storedWays_) {
@@ -200,9 +198,8 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
             continue;
 
         GLuint base = static_cast<GLuint>(vertices.size() / 5);
-
-        // float index = 0.f;
-        // float indexStep = 1.f / static_cast<float>(coords.nodes.size() - 1);
+        const auto &color =
+            HIGHWAY2COLOR.count(entry.second.type) == 0 ? DEFAULT_COLOR : HIGHWAY2COLOR.at(entry.second.type);
 
         for (const auto &loc : coords.nodes) {
             assert(loc.valid());
@@ -211,10 +208,9 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
             // store raw lon/lat in vertex attributes; shader will normalize
             vertices.push_back(static_cast<float>(lon));
             vertices.push_back(static_cast<float>(lat));
-            vertices.push_back(1.0f);
-            vertices.push_back(1.0f);
-            vertices.push_back(1.0f);
-            // index += indexStep;
+            vertices.push_back(color[0]);
+            vertices.push_back(color[1]);
+            vertices.push_back(color[2]);
         }
 
         // indices for GL_LINE_STRIP_ADJACENCY: duplicate first and last

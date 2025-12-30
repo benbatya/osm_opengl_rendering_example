@@ -19,6 +19,7 @@ class OSMLoader {
     struct Way {
         osmium::object_id_type id{0};
         std::string name{};
+        std::string type{};
         std::vector<Coordinate> nodes;
     };
     using Ways = std::unordered_map<osmium::object_id_type, Way>;

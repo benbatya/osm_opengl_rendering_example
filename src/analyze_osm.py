@@ -27,10 +27,16 @@ def get_highway_attributes(file_path):
     # Display results
     print(f"{'Highway Value':<20} | {'Count':<8} | {'Width':<10} | {'Surface':<15}")
     print("-" * 60)
+    total_highways = 0
     for h_type in sorted(highway_data.keys()):
         count = highway_counts[h_type]
+        total_highways += count
         for width, surface in sorted(highway_data[h_type]):
             print(f"{h_type:<20} | {count:<8} | {width:<10} | {surface:<15}")
+
+    print(f"Total number of highway types: {len(highway_data)}")
+    print(f"Total number of highways: {total_highways}")
+
 
 if __name__ == "__main__":
     get_highway_attributes('/home/benjamin/Downloads/map.osm')

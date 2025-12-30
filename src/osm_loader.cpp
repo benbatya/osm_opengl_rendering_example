@@ -66,6 +66,7 @@ using WayNameMap = std::unordered_map<osmium::object_id_type, std::string>;
 struct MappedWayData {
     NodeWaysMap nodeWaysMap;
     WayNameMap wayNames;
+    WayNameMap highwayTypes;
 };
 
 struct NodeWayMapper : public osmium::handler::Handler {
@@ -77,7 +78,9 @@ struct NodeWayMapper : public osmium::handler::Handler {
     void way(const osmium::Way &way) noexcept {
         // filter out ways which are not tagged as highway
         auto tag_value = way.tags().get_value_by_key("highway");
-        if (!tag_value) {
+        if (tag_value) {
+            wayData.highwayTypes[way.id()] = tag_value;
+        } else {
             return;
         }
 
@@ -92,7 +95,6 @@ struct NodeWayMapper : public osmium::handler::Handler {
             assert(node_ref.ref() > 0);
             auto &nodeMap = wayData.nodeWaysMap[node_ref.ref()];
             nodeMap.emplace(way.id(), ii);
-            wayData.wayNames[way.id()] = tag_value ? tag_value : "";
         }
     }
 };
@@ -132,6 +134,9 @@ struct NodeReducer : public osmium::handler::Handler {
             route.id = way.wayID;
             if (route.name.empty()) {
                 route.name = wayData_.wayNames.count(way.wayID) > 0 ? wayData_.wayNames.at(way.wayID) : "";
+            }
+            if (route.type.empty()) {
+                route.type = wayData_.highwayTypes.count(way.wayID) > 0 ? wayData_.highwayTypes.at(way.wayID) : "";
             }
         }
     }
@@ -180,6 +185,16 @@ OSMLoader::Ways OSMLoader::getWays(const CoordinateBounds &bounds) const {
             ++it;
         }
     }
+
+    // Uncomment for data analysis
+    // std::unordered_map<std::string, uint32_t> types;
+    // for (const auto &entry : routes) {
+    //     types[entry.second.type] += 1;
+    // }
+    // std::cout << "Highway types:" << std::endl;
+    // for (const auto &type : types) {
+    //     std::cout << type.first << ": " << type.second << std::endl;
+    // }
 
     return routes;
 }
