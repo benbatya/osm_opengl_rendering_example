@@ -50,24 +50,18 @@ struct WayNodePair {
     osmium::object_id_type wayID;
     size_t nodeIndex;
 
-    WayNodePair(osmium::object_id_type wID, size_t nIndex)
-        : wayID(wID), nodeIndex(nIndex) {}
+    WayNodePair(osmium::object_id_type wID, size_t nIndex) : wayID(wID), nodeIndex(nIndex) {}
 
-    bool operator==(const WayNodePair &other) const {
-        return wayID == other.wayID && nodeIndex == other.nodeIndex;
-    }
+    bool operator==(const WayNodePair &other) const { return wayID == other.wayID && nodeIndex == other.nodeIndex; }
 };
 
 struct WayNodePairHash {
     std::size_t operator()(const WayNodePair &p) const {
-        return std::hash<osmium::object_id_type>()(p.wayID) ^
-               (std::hash<size_t>()(p.nodeIndex) << 1);
+        return std::hash<osmium::object_id_type>()(p.wayID) ^ (std::hash<size_t>()(p.nodeIndex) << 1);
     }
 };
 
-using NodeWaysMap =
-    std::unordered_map<NodeID,
-                       std::unordered_set<WayNodePair, WayNodePairHash>>;
+using NodeWaysMap = std::unordered_map<NodeID, std::unordered_set<WayNodePair, WayNodePairHash>>;
 using WayNameMap = std::unordered_map<osmium::object_id_type, std::string>;
 struct MappedWayData {
     NodeWaysMap nodeWaysMap;
@@ -76,9 +70,7 @@ struct MappedWayData {
 
 struct NodeWayMapper : public osmium::handler::Handler {
     // Map of Node IDs -> Way IDs to be retrieved later
-    // NodeWaysMap requestedNodes_{};
-    // WayNameMap wayNames_;
-    MappedWayData wayData_;
+    MappedWayData wayData;
 
     NodeWayMapper() = default;
 
@@ -91,16 +83,16 @@ struct NodeWayMapper : public osmium::handler::Handler {
 
         tag_value = way.tags().get_value_by_key("name");
         if (tag_value) {
-            wayData_.wayNames[way.id()] = tag_value;
+            wayData.wayNames[way.id()] = tag_value;
         }
 
         for (size_t ii = 0; ii < way.nodes().size(); ++ii) {
             const auto &node_ref = way.nodes()[ii];
             // Assume that we only get po
             assert(node_ref.ref() > 0);
-            auto &nodeMap = wayData_.nodeWaysMap[node_ref.ref()];
+            auto &nodeMap = wayData.nodeWaysMap[node_ref.ref()];
             nodeMap.emplace(way.id(), ii);
-            wayData_.wayNames[way.id()] = tag_value ? tag_value : "";
+            wayData.wayNames[way.id()] = tag_value ? tag_value : "";
         }
     }
 };
@@ -112,8 +104,7 @@ struct NodeReducer : public osmium::handler::Handler {
 
     OSMLoader::Ways &routes_;
 
-    NodeReducer(const osmium::Box &bounds, const MappedWayData &wayData,
-                OSMLoader::Ways &routes)
+    NodeReducer(const osmium::Box &bounds, const MappedWayData &wayData, OSMLoader::Ways &routes)
         : bounds_(bounds), wayData_(wayData), routes_(routes) {}
 
     void node(const osmium::Node &node) noexcept {
@@ -140,9 +131,7 @@ struct NodeReducer : public osmium::handler::Handler {
             route.nodes[way.nodeIndex] = node.location();
             route.id = way.wayID;
             if (route.name.empty()) {
-                route.name = wayData_.wayNames.count(way.wayID) > 0
-                                 ? wayData_.wayNames.at(way.wayID)
-                                 : "";
+                route.name = wayData_.wayNames.count(way.wayID) > 0 ? wayData_.wayNames.at(way.wayID) : "";
             }
         }
     }
@@ -169,9 +158,8 @@ OSMLoader::Ways OSMLoader::getWays(const CoordinateBounds &bounds) const {
 
         // 2) find the nodes which were requested in (1) and are within bounds
         // and build a buffer to hold them
-        osmium::io::Reader nodeReader{input_file,
-                                      osmium::osm_entity_bits::node};
-        NodeReducer reducer(bounds, wayHandler.wayData_, routes);
+        osmium::io::Reader nodeReader{input_file, osmium::osm_entity_bits::node};
+        NodeReducer reducer(bounds, wayHandler.wayData, routes);
         osmium::apply(nodeReader, reducer);
         nodeReader.close();
 
@@ -183,8 +171,7 @@ OSMLoader::Ways OSMLoader::getWays(const CoordinateBounds &bounds) const {
     for (auto it = routes.begin(); it != routes.end();) {
         auto &way = it->second;
         auto new_end =
-            std::remove_if(way.nodes.begin(), way.nodes.end(),
-                           [](const Coordinate &loc) { return !loc.valid(); });
+            std::remove_if(way.nodes.begin(), way.nodes.end(), [](const Coordinate &loc) { return !loc.valid(); });
         way.nodes.erase(new_end, way.nodes.end());
 
         if (way.nodes.empty()) {

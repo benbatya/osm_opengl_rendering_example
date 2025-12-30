@@ -19,7 +19,7 @@ class OpenGLCanvas : public wxGLCanvas {
 
     bool InitializeOpenGL();
 
-    bool IsOpenGLInitialized() const { return isOpenGLInitialized; }
+    bool IsOpenGLInitialized() const { return isOpenGLInitialized_; }
 
     void OnPaint(wxPaintEvent &event);
     void OnSize(wxSizeEvent &event);
@@ -39,26 +39,24 @@ class OpenGLCanvas : public wxGLCanvas {
   protected:
     void CompileShaderProgram();
 
-    std::string GetShaderBuildLog() const {
-        return shaderProgram.lastBuildLog.str();
-    }
+    std::string GetShaderBuildLog() const { return shaderProgram_.lastBuildLog_.str(); }
 
   private:
     bool InitializeOpenGLFunctions();
 
-    wxGLContext *openGLContext;
-    bool isOpenGLInitialized{false};
+    wxGLContext *openGLContext_;
+    bool isOpenGLInitialized_{false};
 
-    ShaderProgram shaderProgram{};
+    ShaderProgram shaderProgram_{};
 
-    wxTimer timer;
-    std::chrono::high_resolution_clock::time_point openGLInitializationTime{};
-    float elapsedSeconds{0.0f};
+    wxTimer timer_;
+    std::chrono::high_resolution_clock::time_point openGLInitializationTime_{};
+    float elapsedSeconds_{0.0f};
 
     // FPS display/state
-    std::chrono::high_resolution_clock::time_point lastFpsUpdateTime{};
-    int framesSinceLastFps{0};
-    float fps{0.0f};
+    std::chrono::high_resolution_clock::time_point lastFpsUpdateTime_{};
+    int framesSinceLastFps_{0};
+    float fps_{0.0f};
 
     GLuint VAO_{0};
     GLuint VBO_{0};           // vertex buffer object

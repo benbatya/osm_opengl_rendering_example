@@ -92,13 +92,13 @@ static void GLDebugCallbackFunc(GLenum source, GLenum type, GLuint id, GLenum se
 OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs) : wxGLCanvas(parent, canvasAttrs) {
     wxGLContextAttrs ctxAttrs;
     ctxAttrs.PlatformDefaults().CoreProfile().OGLVersion(3, 3).EndList();
-    openGLContext = new wxGLContext(this, nullptr, &ctxAttrs);
+    openGLContext_ = new wxGLContext(this, nullptr, &ctxAttrs);
 
-    if (!openGLContext->IsOK()) {
+    if (!openGLContext_->IsOK()) {
         wxMessageBox("This sample needs an OpenGL 3.3 capable driver.", "OpenGL version error",
                      wxOK | wxICON_INFORMATION, this);
-        delete openGLContext;
-        openGLContext = nullptr;
+        delete openGLContext_;
+        openGLContext_ = nullptr;
     }
 
     Bind(wxEVT_PAINT, &OpenGLCanvas::OnPaint, this);
@@ -110,11 +110,11 @@ OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs) 
     // Bind mouse wheel events for zooming
     Bind(wxEVT_MOUSEWHEEL, &OpenGLCanvas::OnMouseWheel, this);
 
-    timer.SetOwner(this);
+    timer_.SetOwner(this);
     this->Bind(wxEVT_TIMER, &OpenGLCanvas::OnTimer, this);
 
     constexpr auto FPS = 60.0;
-    timer.Start(1000 / FPS);
+    timer_.Start(1000 / FPS);
 }
 
 void OpenGLCanvas::SetWays(const OSMLoader::Ways &ways, const osmium::Box &bounds) {
@@ -163,7 +163,7 @@ void OpenGLCanvas::SetWays(const OSMLoader::Ways &ways, const osmium::Box &bound
     // Take all ways
     storedWays_ = ways;
 
-    if (isOpenGLInitialized) {
+    if (isOpenGLInitialized_) {
         UpdateBuffersFromRoutes();
     }
 }
@@ -269,10 +269,10 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
 }
 
 void OpenGLCanvas::CompileShaderProgram() {
-    shaderProgram.vertexShaderSource = VertexShader;
-    shaderProgram.geometryShaderSource = GeometryShader;
-    shaderProgram.fragmentShaderSource = FragmentShader;
-    shaderProgram.Build();
+    shaderProgram_.vertexShaderSource_ = VertexShader;
+    shaderProgram_.geometryShaderSource_ = GeometryShader;
+    shaderProgram_.fragmentShaderSource_ = FragmentShader;
+    shaderProgram_.Build();
 
     if (!GetShaderBuildLog().empty()) {
         std::cerr << "Shader failed to compile." << std::endl;
@@ -287,7 +287,7 @@ OpenGLCanvas::~OpenGLCanvas() {
 
     glDeleteBuffers(1, &EBO_);
 
-    delete openGLContext;
+    delete openGLContext_;
 }
 
 bool OpenGLCanvas::InitializeOpenGLFunctions() {
@@ -304,11 +304,11 @@ bool OpenGLCanvas::InitializeOpenGLFunctions() {
 }
 
 bool OpenGLCanvas::InitializeOpenGL() {
-    if (!openGLContext) {
+    if (!openGLContext_) {
         return false;
     }
 
-    SetCurrent(*openGLContext);
+    SetCurrent(*openGLContext_);
 
     if (!InitializeOpenGLFunctions()) {
         wxMessageBox("Error: Could not initialize OpenGL function pointers.", "OpenGL initialization error",
@@ -391,11 +391,11 @@ bool OpenGLCanvas::InitializeOpenGL() {
         drawCommands_.emplace_back(elementCount_, 0);
     }
 
-    isOpenGLInitialized = true;
-    openGLInitializationTime = std::chrono::high_resolution_clock::now();
+    isOpenGLInitialized_ = true;
+    openGLInitializationTime_ = std::chrono::high_resolution_clock::now();
     // initialize FPS timer state
-    lastFpsUpdateTime = std::chrono::high_resolution_clock::now();
-    framesSinceLastFps = 0;
+    lastFpsUpdateTime_ = std::chrono::high_resolution_clock::now();
+    framesSinceLastFps_ = 0;
 
     wxCommandEvent evt(wxEVT_OPENGL_INITIALIZED);
     evt.SetEventObject(this);
@@ -407,18 +407,18 @@ bool OpenGLCanvas::InitializeOpenGL() {
 void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     wxPaintDC dc(this);
 
-    if (!isOpenGLInitialized) {
+    if (!isOpenGLInitialized_) {
         return;
     }
 
-    SetCurrent(*openGLContext);
+    SetCurrent(*openGLContext_);
 
     float clearColor = 0.87f;
     glClearColor(clearColor, clearColor, clearColor, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (shaderProgram.shaderProgram.has_value()) {
-        glUseProgram(shaderProgram.shaderProgram.value());
+    if (shaderProgram_.shaderProgram_.has_value()) {
+        glUseProgram(shaderProgram_.shaderProgram_.value());
 
         // upload bounds uniform: (minLon, minLat, lonRange, latRange)
         double minLon = bounds_.left();
@@ -432,7 +432,7 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
             lonRange = 1.0;
         if (latRange == 0.0)
             latRange = 1.0;
-        GLint loc = glGetUniformLocation(shaderProgram.shaderProgram.value(), "uBounds");
+        GLint loc = glGetUniformLocation(shaderProgram_.shaderProgram_.value(), "uBounds");
         if (loc >= 0) {
             glUniform4f(loc, static_cast<float>(minLon), static_cast<float>(minLat), static_cast<float>(lonRange),
                         static_cast<float>(latRange));
@@ -453,16 +453,16 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     SwapBuffers();
 
     // Update FPS counters and draw overlay text
-    ++framesSinceLastFps;
+    ++framesSinceLastFps_;
     auto now = std::chrono::high_resolution_clock::now();
-    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFpsUpdateTime);
+    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastFpsUpdateTime_);
     if (dur.count() >= 250) { // update FPS every 250ms for smoother display
         float seconds = dur.count() / 1000.0f;
         if (seconds > 0.0f) {
-            fps = static_cast<float>(framesSinceLastFps) / seconds;
+            fps_ = static_cast<float>(framesSinceLastFps_) / seconds;
         }
-        framesSinceLastFps = 0;
-        lastFpsUpdateTime = now;
+        framesSinceLastFps_ = 0;
+        lastFpsUpdateTime_ = now;
     }
 
     // Draw FPS using wx overlay drawing so it's on top of GL content.
@@ -476,21 +476,21 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     std::ostringstream ss;
     ss.setf(std::ios::fixed);
     ss.precision(1);
-    ss << "FPS: " << fps;
+    ss << "FPS: " << fps_;
     const std::string fpsText = ss.str();
     const int margin = 8;
     overlayDc.DrawText(fpsText, margin, margin);
 }
 
 void OpenGLCanvas::OnSize(wxSizeEvent &event) {
-    bool firstApperance = IsShownOnScreen() && !isOpenGLInitialized;
+    bool firstApperance = IsShownOnScreen() && !isOpenGLInitialized_;
 
     if (firstApperance) {
         InitializeOpenGL();
     }
 
-    if (isOpenGLInitialized) {
-        SetCurrent(*openGLContext);
+    if (isOpenGLInitialized_) {
+        SetCurrent(*openGLContext_);
 
         auto viewPortSize = event.GetSize() * GetContentScaleFactor();
         glViewport(0, 0, viewPortSize.x, viewPortSize.y);
@@ -500,10 +500,10 @@ void OpenGLCanvas::OnSize(wxSizeEvent &event) {
 }
 
 void OpenGLCanvas::OnTimer(wxTimerEvent &WXUNUSED(event)) {
-    if (isOpenGLInitialized) {
+    if (isOpenGLInitialized_) {
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now() - openGLInitializationTime);
-        elapsedSeconds = duration.count() / 1000.0f;
+            std::chrono::high_resolution_clock::now() - openGLInitializationTime_);
+        elapsedSeconds_ = duration.count() / 1000.0f;
         Refresh(false);
     }
 }
@@ -655,7 +655,7 @@ void OpenGLCanvas::OnMouseWheel(wxMouseEvent &event) {
     bounds_ = newBounds;
 
     // If ways are present, update GPU buffers to reflect new projection
-    if (isOpenGLInitialized) {
+    if (isOpenGLInitialized_) {
         UpdateBuffersFromRoutes();
     }
 

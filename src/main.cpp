@@ -69,9 +69,7 @@ void MyApp::OnInitCmdLine(wxCmdLineParser &parser) {
     wxApp::OnInitCmdLine(parser);
 
     static const wxCmdLineEntryDesc cmdLineDesc[] = {
-        {wxCMD_LINE_PARAM, NULL, NULL, "Input OSM datafile",
-         wxCMD_LINE_VAL_STRING},
-        {wxCMD_LINE_NONE}};
+        {wxCMD_LINE_PARAM, NULL, NULL, "Input OSM datafile", wxCMD_LINE_VAL_STRING}, {wxCMD_LINE_NONE}};
 
     parser.SetDesc(cmdLineDesc);
 }
@@ -111,12 +109,10 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
 
     this->Bind(wxEVT_SIZE, &MyFrame::OnSize, this);
 
-    const auto bounds =
-        osmium::Box({-122.50035, 37.84373}, {-122.46780, 37.85918});
+    const auto bounds = osmium::Box({-122.50035, 37.84373}, {-122.46780, 37.85918});
 
     auto ways = osmLoader_->getWays(bounds);
-    std::cout << "Loaded " << ways.size() << " ways from OSM data."
-              << std::endl;
+    std::cout << "Loaded " << ways.size() << " ways from OSM data." << std::endl;
     int nodeCount = 0;
     for (const auto &wayPair : ways) {
         nodeCount += static_cast<int>(wayPair.second.nodes.size());
@@ -134,8 +130,7 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
 void MyFrame::OnOpenGLInitialized(wxCommandEvent &event) {}
 
 wxFont GetMonospacedFont(wxFontInfo &&fontInfo) {
-    const wxString preferredFonts[] = {"Menlo", "Consolas", "Monaco",
-                                       "DejaVu Sans Mono", "Courier New"};
+    const wxString preferredFonts[] = {"Menlo", "Consolas", "Monaco", "DejaVu Sans Mono", "Courier New"};
 
     for (const wxString &fontName : preferredFonts) {
         fontInfo.FaceName(fontName);
@@ -155,8 +150,7 @@ void MyFrame::OnSize(wxSizeEvent &event) {
     //           << "x" << event.GetSize().GetHeight() << std::endl;
     // a workaround for the OpenGLCanvas not getting the initial size event
     // if contained in wxSplitterWindow
-    if (!openGLCanvas->IsOpenGLInitialized() &&
-        openGLCanvas->IsShownOnScreen()) {
+    if (!openGLCanvas->IsOpenGLInitialized() && openGLCanvas->IsShownOnScreen()) {
         openGLCanvas->InitializeOpenGL();
 
         // we just need one shot for this workaround, so unbind

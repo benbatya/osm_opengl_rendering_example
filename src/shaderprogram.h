@@ -9,47 +9,43 @@
 struct ShaderProgram {
 
     void Build() {
-        lastBuildLog = {};
+        lastBuildLog_ = {};
 
-        unsigned int vertexShader =
-            CompileShader(GL_VERTEX_SHADER, vertexShaderSource.c_str());
-        unsigned int fragmentShader =
-            CompileShader(GL_FRAGMENT_SHADER, fragmentShaderSource.c_str());
+        unsigned int vertexShader = CompileShader(GL_VERTEX_SHADER, vertexShaderSource_.c_str());
+        unsigned int fragmentShader = CompileShader(GL_FRAGMENT_SHADER, fragmentShaderSource_.c_str());
 
-        shaderProgram = glCreateProgram();
-        glAttachShader(shaderProgram.value(), vertexShader);
-        glAttachShader(shaderProgram.value(), fragmentShader);
+        shaderProgram_ = glCreateProgram();
+        glAttachShader(shaderProgram_.value(), vertexShader);
+        glAttachShader(shaderProgram_.value(), fragmentShader);
 
         unsigned int geometryShader = 0;
-        if (geometryShaderSource.size() > 0) {
-            geometryShader =
-                CompileShader(GL_GEOMETRY_SHADER, geometryShaderSource.c_str());
-            glAttachShader(shaderProgram.value(), geometryShader);
+        if (geometryShaderSource_.size() > 0) {
+            geometryShader = CompileShader(GL_GEOMETRY_SHADER, geometryShaderSource_.c_str());
+            glAttachShader(shaderProgram_.value(), geometryShader);
         }
 
-        glLinkProgram(shaderProgram.value());
+        glLinkProgram(shaderProgram_.value());
 
         // check linking errors
         int success;
 
-        glGetProgramiv(shaderProgram.value(), GL_LINK_STATUS, &success);
+        glGetProgramiv(shaderProgram_.value(), GL_LINK_STATUS, &success);
 
         if (!success) {
             char infoLog[512];
-            glGetProgramInfoLog(shaderProgram.value(), 512, nullptr, infoLog);
-            lastBuildLog << "Shader program linking failed: " << infoLog;
+            glGetProgramInfoLog(shaderProgram_.value(), 512, nullptr, infoLog);
+            lastBuildLog_ << "Shader program linking failed: " << infoLog;
         }
 
         glDeleteShader(vertexShader);
         glDeleteShader(fragmentShader);
 
-        if (geometryShaderSource.size() > 0) {
+        if (geometryShaderSource_.size() > 0) {
             glDeleteShader(geometryShader);
         }
     }
 
-    unsigned int CompileShader(unsigned int shaderType,
-                               const char *shaderSource) {
+    unsigned int CompileShader(unsigned int shaderType, const char *shaderSource) {
         unsigned int shader = glCreateShader(shaderType);
         glShaderSource(shader, 1, &shaderSource, nullptr);
         glCompileShader(shader);
@@ -60,17 +56,17 @@ struct ShaderProgram {
         if (!success) {
             char infoLog[512];
             glGetShaderInfoLog(shader, 512, nullptr, infoLog);
-            lastBuildLog << "Shader compilation failed: " << infoLog;
+            lastBuildLog_ << "Shader compilation failed: " << infoLog;
         }
 
         return shader;
     }
 
-    std::optional<unsigned int> shaderProgram = std::nullopt;
+    std::optional<unsigned int> shaderProgram_ = std::nullopt;
 
-    std::string vertexShaderSource{};
-    std::string geometryShaderSource{};
-    std::string fragmentShaderSource{};
+    std::string vertexShaderSource_{};
+    std::string geometryShaderSource_{};
+    std::string fragmentShaderSource_{};
 
-    std::stringstream lastBuildLog;
+    std::stringstream lastBuildLog_;
 };
