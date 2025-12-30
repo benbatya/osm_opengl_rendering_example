@@ -58,11 +58,11 @@ class OpenGLCanvas : public wxGLCanvas {
     osmium::Box bounds_{};
 
     // Stored routes (kept so buffers can be uploaded after GL init)
-    OSMLoader::Ways storedWays_{};
+    OSMLoader::Ways storedRoutes_{};
     // Draw commands: pair<count, byteOffsetInEBO>
     std::vector<std::pair<GLsizei, size_t>> drawCommands_{};
 
-    // Update GPU buffers from `storedWays_` (called after GL init or when
+    // Update GPU buffers from `storedRoutes_` (called after GL init or when
     // SetWays is invoked while GL is available).
     void UpdateBuffersFromRoutes();
 };

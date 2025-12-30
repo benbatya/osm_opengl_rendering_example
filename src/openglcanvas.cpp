@@ -197,6 +197,9 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
 
         GLuint base = static_cast<GLuint>(vertices.size() / 5);
 
+        float index = 0.f;
+        float indexStep = 1.f / static_cast<float>(coords.nodes.size() - 1);
+
         // vertices
         for (const auto &loc : coords.nodes) {
             if (!loc.valid())
@@ -212,9 +215,10 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
             // color: simple dark gray for now
             vertices.push_back(x);
             vertices.push_back(y);
-            vertices.push_back(0.3f);
-            vertices.push_back(0.3f);
-            vertices.push_back(0.3f);
+            vertices.push_back(index);
+            vertices.push_back(0.f);
+            vertices.push_back(0.f);
+            index += indexStep;
         }
 
         // indices for GL_LINE_STRIP_ADJACENCY: duplicate first and last
