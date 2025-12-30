@@ -117,7 +117,13 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
     auto ways = osmLoader_->getWays(bounds);
     std::cout << "Loaded " << ways.size() << " ways from OSM data."
               << std::endl;
-    // Upload ways into the OpenGL canvas so it can replace the VBO/EBO.
+    int nodeCount = 0;
+    for (const auto &wayPair : ways) {
+        nodeCount += static_cast<int>(wayPair.second.nodes.size());
+    }
+    std::cout << "Total nodes in loaded ways: " << nodeCount << std::endl;
+    // Upload ways into the OpenGL canvas so it can replace the
+    // VBO/EBO.
     if (openGLCanvas) {
         openGLCanvas->SetWays(ways, bounds);
     }

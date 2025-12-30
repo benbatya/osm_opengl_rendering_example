@@ -26,7 +26,7 @@ class OpenGLCanvas : public wxGLCanvas {
 
     void OnTimer(wxTimerEvent &event);
 
-    void OnMouseWheel(wxMouseEvent &event);
+    // void OnMouseWheel(wxMouseEvent &event);
 
     // Upload routes from OSMLoader into GPU buffers. This replaces the
     // existing VBO_/EBO_ contents when called.
@@ -50,6 +50,11 @@ class OpenGLCanvas : public wxGLCanvas {
     wxTimer timer;
     std::chrono::high_resolution_clock::time_point openGLInitializationTime{};
     float elapsedSeconds{0.0f};
+
+    // FPS display/state
+    std::chrono::high_resolution_clock::time_point lastFpsUpdateTime{};
+    int framesSinceLastFps{0};
+    float fps{0.0f};
 
     GLuint VAO_{0};
     GLuint VBO_{0};           // vertex buffer object

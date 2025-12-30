@@ -107,7 +107,7 @@ OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs)
     Bind(wxEVT_SIZE, &OpenGLCanvas::OnSize, this);
 
     // Bind mouse wheel events for zooming
-    Bind(wxEVT_MOUSEWHEEL, &OpenGLCanvas::OnMouseWheel, this);
+    // Bind(wxEVT_MOUSEWHEEL, &OpenGLCanvas::OnMouseWheel, this);
 
     timer.SetOwner(this);
     this->Bind(wxEVT_TIMER, &OpenGLCanvas::OnTimer, this);
@@ -116,43 +116,43 @@ OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs)
     timer.Start(1000 / FPS);
 }
 
-void OpenGLCanvas::SetWays(const OSMLoader::Ways &routes,
+void OpenGLCanvas::SetWays(const OSMLoader::Ways &ways,
                            const osmium::Box &bounds) {
     bounds_ = bounds;
-    // Find the longest routes and store only those for testing
+    // Find the longest ways and store only those for testing
     storedWays_.clear();
 
-    const size_t NUM_WAYS = std::min(routes.size(), static_cast<size_t>(1));
+    // const size_t NUM_WAYS = std::min(ways.size(), static_cast<size_t>(1));
 
-    std::unordered_map<size_t, std::vector<osmium::object_id_type>> lenIdMap;
+    // std::unordered_map<size_t, std::vector<osmium::object_id_type>> lenIdMap;
 
-    for (const auto &route : routes) {
-        auto length = route.second.nodes.size();
-        lenIdMap[length].push_back(route.first);
-    }
+    // for (const auto &way : ways) {
+    //     auto length = way.second.nodes.size();
+    //     lenIdMap[length].push_back(way.first);
+    // }
 
-    std::vector<size_t> sortedLengths;
-    for (const auto &pair : lenIdMap) {
-        sortedLengths.push_back(pair.first);
-    }
-    std::sort(sortedLengths.rbegin(), sortedLengths.rend());
+    // std::vector<size_t> sortedLengths;
+    // for (const auto &pair : lenIdMap) {
+    //     sortedLengths.push_back(pair.first);
+    // }
+    // std::sort(sortedLengths.rbegin(), sortedLengths.rend());
 
-    size_t count = 0;
-    for (size_t length : sortedLengths) {
-        for (auto routeId : lenIdMap[length]) {
-            if (count >= NUM_WAYS)
-                break;
-            storedWays_[routeId] = routes.at(routeId);
-            std::cout << "Selected way ID " << routeId << ", '"
-                      << storedWays_.at(routeId).name << "' with length "
-                      << length << std::endl;
-            ++count;
-        }
-    }
-
-    // take first N routes
     // size_t count = 0;
-    // for (const auto &route : routes) {
+    // for (size_t length : sortedLengths) {
+    //     for (auto wayId : lenIdMap[length]) {
+    //         if (count >= NUM_WAYS)
+    //             break;
+    //         storedWays_[wayId] = ways.at(wayId);
+    //         std::cout << "Selected way ID " << wayId << ", '"
+    //                   << storedWays_.at(wayId).name << "' with length "
+    //                   << length << std::endl;
+    //         ++count;
+    //     }
+    // }
+
+    // take first N ways
+    // size_t count = 0;
+    // for (const auto &route : ways) {
     //     if (count >= NUM_WAYS) {
     //         break;
     //     }
@@ -161,7 +161,7 @@ void OpenGLCanvas::SetWays(const OSMLoader::Ways &routes,
     // }
 
     // Take all ways
-    // storedRoutes_ = routes;
+    storedWays_ = ways;
 
     if (isOpenGLInitialized) {
         UpdateBuffersFromRoutes();
@@ -201,27 +201,20 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
 
         GLuint base = static_cast<GLuint>(vertices.size() / 5);
 
-        float index = 0.f;
-        float indexStep = 1.f / static_cast<float>(coords.nodes.size() - 1);
+        // float index = 0.f;
+        // float indexStep = 1.f / static_cast<float>(coords.nodes.size() - 1);
 
-        // vertices
-        int node_idx = 0;
         for (const auto &loc : coords.nodes) {
-            if (!loc.valid())
-                continue;
+            assert(loc.valid());
             double lon = loc.lon();
             double lat = loc.lat();
             // store raw lon/lat in vertex attributes; shader will normalize
             vertices.push_back(static_cast<float>(lon));
             vertices.push_back(static_cast<float>(lat));
-            vertices.push_back(index);
-            vertices.push_back(0.f);
-            vertices.push_back(0.f);
-            index += indexStep;
-
-            if (node_idx++ > 25) {
-                break;
-            }
+            vertices.push_back(1.0f);
+            vertices.push_back(1.0f);
+            vertices.push_back(1.0f);
+            // index += indexStep;
         }
 
         // indices for GL_LINE_STRIP_ADJACENCY: duplicate first and last
@@ -354,7 +347,7 @@ bool OpenGLCanvas::InitializeOpenGL() {
 
     CompileShaderProgram();
 
-    // If routes were provided before GL initialization, upload them now.
+    // If ways were provided before GL initialization, upload them now.
     if (!storedWays_.empty()) {
         UpdateBuffersFromRoutes();
     } else {
@@ -416,6 +409,9 @@ bool OpenGLCanvas::InitializeOpenGL() {
 
     isOpenGLInitialized = true;
     openGLInitializationTime = std::chrono::high_resolution_clock::now();
+    // initialize FPS timer state
+    lastFpsUpdateTime = std::chrono::high_resolution_clock::now();
+    framesSinceLastFps = 0;
 
     wxCommandEvent evt(wxEVT_OPENGL_INITIALIZED);
     evt.SetEventObject(this);
@@ -433,7 +429,8 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
 
     SetCurrent(*openGLContext);
 
-    glClearColor(0.968f, 0.968f, 0.968f, 1.0f);
+    float clearColor = 0.87f;
+    glClearColor(clearColor, clearColor, clearColor, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     if (shaderProgram.shaderProgram.has_value()) {
@@ -474,6 +471,36 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
         glBindVertexArray(0); // Unbind VAO_ for safety
     }
     SwapBuffers();
+
+    // Update FPS counters and draw overlay text
+    ++framesSinceLastFps;
+    auto now = std::chrono::high_resolution_clock::now();
+    auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - lastFpsUpdateTime);
+    if (dur.count() >= 250) { // update FPS every 250ms for smoother display
+        float seconds = dur.count() / 1000.0f;
+        if (seconds > 0.0f) {
+            fps = static_cast<float>(framesSinceLastFps) / seconds;
+        }
+        framesSinceLastFps = 0;
+        lastFpsUpdateTime = now;
+    }
+
+    // Draw FPS using wx overlay drawing so it's on top of GL content.
+    // Use a small margin from the top-left corner.
+    wxClientDC overlayDc(this);
+    wxFont font = overlayDc.GetFont();
+    font.SetWeight(wxFONTWEIGHT_BOLD);
+    font.SetPointSize(10);
+    overlayDc.SetFont(font);
+    overlayDc.SetTextForeground(*wxBLACK);
+    std::ostringstream ss;
+    ss.setf(std::ios::fixed);
+    ss.precision(1);
+    ss << "FPS: " << fps;
+    const std::string fpsText = ss.str();
+    const int margin = 8;
+    overlayDc.DrawText(fpsText, margin, margin);
 }
 
 void OpenGLCanvas::OnSize(wxSizeEvent &event) {
@@ -503,70 +530,70 @@ void OpenGLCanvas::OnTimer(wxTimerEvent &WXUNUSED(event)) {
     }
 }
 
-void OpenGLCanvas::OnMouseWheel(wxMouseEvent &event) {
-    // Use wheel rotation to compute zoom steps
-    const int rotation = event.GetWheelRotation();
-    const int delta = event.GetWheelDelta();
-    if (delta == 0 || rotation == 0)
-        return;
+// void OpenGLCanvas::OnMouseWheel(wxMouseEvent &event) {
+//     // Use wheel rotation to compute zoom steps
+//     const int rotation = event.GetWheelRotation();
+//     const int delta = event.GetWheelDelta();
+//     if (delta == 0 || rotation == 0)
+//         return;
 
-    const int steps = rotation / delta;
+//     const int steps = rotation / delta;
 
-    // scale per step (<1 zooms in, >1 zooms out when steps negative)
-    const double stepScale = 0.9; // each step scales viewport by 90%
-    const double scale = std::pow(stepScale, steps);
+//     // scale per step (<1 zooms in, >1 zooms out when steps negative)
+//     const double stepScale = 0.9; // each step scales viewport by 90%
+//     const double scale = std::pow(stepScale, steps);
 
-    // current bounds
-    double minLon = bounds_.left();
-    double maxLon = bounds_.right();
-    double minLat = bounds_.bottom();
-    double maxLat = bounds_.top();
+//     // current bounds
+//     double minLon = bounds_.left();
+//     double maxLon = bounds_.right();
+//     double minLat = bounds_.bottom();
+//     double maxLat = bounds_.top();
 
-    double lonRange = (maxLon - minLon);
-    double latRange = (maxLat - minLat);
-    if (lonRange == 0.0 || latRange == 0.0)
-        return;
+//     double lonRange = (maxLon - minLon);
+//     double latRange = (maxLat - minLat);
+//     if (lonRange == 0.0 || latRange == 0.0)
+//         return;
 
-    // Map mouse position to [0,1] in lon/lat space. Need to account for
-    // content scale factor used when setting the viewport.
-    auto viewPortSize = GetClientSize() * GetContentScaleFactor();
-    if (viewPortSize.x <= 0 || viewPortSize.y <= 0)
-        return;
+//     // Map mouse position to [0,1] in lon/lat space. Need to account for
+//     // content scale factor used when setting the viewport.
+//     auto viewPortSize = GetClientSize() * GetContentScaleFactor();
+//     if (viewPortSize.x <= 0 || viewPortSize.y <= 0)
+//         return;
 
-    auto pos = event.GetPosition() * GetContentScaleFactor();
-    double mx = static_cast<double>(pos.x);
-    double my = static_cast<double>(pos.y);
-    double w = static_cast<double>(viewPortSize.x);
-    double h = static_cast<double>(viewPortSize.y);
+//     auto pos = event.GetPosition() * GetContentScaleFactor();
+//     double mx = static_cast<double>(pos.x);
+//     double my = static_cast<double>(pos.y);
+//     double w = static_cast<double>(viewPortSize.x);
+//     double h = static_cast<double>(viewPortSize.y);
 
-    double xNorm = mx / w;
-    double yNorm = 1.0 - (my / h); // invert Y (wx origin is top-left)
+//     double xNorm = mx / w;
+//     double yNorm = 1.0 - (my / h); // invert Y (wx origin is top-left)
 
-    // clamp
-    xNorm = std::min(std::max(xNorm, 0.0), 1.0);
-    yNorm = std::min(std::max(yNorm, 0.0), 1.0);
+//     // clamp
+//     xNorm = std::min(std::max(xNorm, 0.0), 1.0);
+//     yNorm = std::min(std::max(yNorm, 0.0), 1.0);
 
-    double centerLon = minLon + xNorm * lonRange;
-    double centerLat = minLat + yNorm * latRange;
+//     double centerLon = minLon + xNorm * lonRange;
+//     double centerLat = minLat + yNorm * latRange;
 
-    double newLonRange = lonRange * scale;
-    double newLatRange = latRange * scale;
+//     double newLonRange = lonRange * scale;
+//     double newLatRange = latRange * scale;
 
-    const double kMinRange = 1e-12;
-    if (newLonRange < kMinRange || newLatRange < kMinRange)
-        return;
+//     const double kMinRange = 1e-12;
+//     if (newLonRange < kMinRange || newLatRange < kMinRange)
+//         return;
 
-    double newMinLon = centerLon - newLonRange / 2.0;
-    double newMaxLon = centerLon + newLonRange / 2.0;
-    double newMinLat = centerLat - newLatRange / 2.0;
-    double newMaxLat = centerLat + newLatRange / 2.0;
+//     double newMinLon = centerLon - newLonRange / 2.0;
+//     double newMaxLon = centerLon + newLonRange / 2.0;
+//     double newMinLat = centerLat - newLatRange / 2.0;
+//     double newMaxLat = centerLat + newLatRange / 2.0;
 
-    bounds_ = osmium::Box({newMinLon, newMinLat}, {newMaxLon, newMaxLat});
+//     bounds_ = osmium::Box({newMinLon, newMinLat}, {newMaxLon, newMaxLat});
 
-    // If routes are present, update GPU buffers to reflect new projection
-    if (isOpenGLInitialized) {
-        UpdateBuffersFromRoutes();
-    }
+//     // If ways are present, update GPU buffers to reflect new projection
+//     if (isOpenGLInitialized) {
+//         UpdateBuffersFromRoutes();
+//     }
 
-    Refresh(false);
-}
+//     Refresh(false);
+// }

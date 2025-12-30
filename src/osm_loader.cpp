@@ -39,93 +39,35 @@
 // location handler for ways
 #include <osmium/handler/node_locations_for_ways.hpp>
 
+#include <algorithm>
 #include <cstdint> // for std::uint64_t
 #include <exception>
 #include <iostream> // for std::cout, std::cerr
 #include <unordered_set>
-
-// // Handler derive from the osmium::handler::Handler base class. Usually you
-// // overwrite functions node(), way(), and relation(). Other functions are
-// // available, too. Read the API documentation for details.
-// struct CountHandler : public osmium::handler::Handler {
-
-//     std::uint64_t nodes = 0;
-//     std::uint64_t ways = 0;
-//     std::uint64_t relations = 0;
-
-//     // This callback is called by osmium::apply for each node in the data.
-//     void node(const osmium::Node& /*node*/) noexcept
-//     {
-//         ++nodes;
-//     }
-
-//     // This callback is called by osmium::apply for each way in the data.
-//     void way(const osmium::Way& /*way*/) noexcept
-//     {
-//         ++ways;
-//     }
-
-//     // This callback is called by osmium::apply for each relation in the
-//     data. void relation(const osmium::Relation& /*relation*/) noexcept
-//     {
-//         ++relations;
-//     }
-
-// }; // struct CountHandler
-
-// bool OSMLoader::Count()
-// {
-//     if (filepath_.empty()) {
-//         std::cerr << "No input file specified." << std::endl;
-//         return false;
-//     }
-
-//     try {
-//         // The Reader is initialized here with an osmium::io::File, but could
-//         // also be directly initialized with a file name.
-//         const osmium::io::File input_file { filepath_ };
-//         osmium::io::Reader reader { input_file };
-
-//         std::cout << "Counting OSM objects in file: " << filepath_ <<
-//         std::endl;
-
-//         // Create an instance of our own CountHandler and push the data from
-//         the
-//         // input file through it.
-//         CountHandler handler;
-//         osmium::apply(reader, handler);
-
-//         // You do not have to close the Reader explicitly, but because the
-//         // destructor can't throw, you will not see any errors otherwise.
-//         reader.close();
-
-//         std::cout << "Nodes: " << handler.nodes << std::endl;
-//         std::cout << "Ways: " << handler.ways << std::endl;
-//         std::cout << "Relations: " << handler.relations << std::endl;
-
-//         // Because of the huge amount of OSM data, some Osmium-based programs
-//         // (though not this one) can use huge amounts of data. So checking
-//         actual
-//         // memore usage is often useful and can be done easily with this
-//         class.
-//         // (Currently only works on Linux, not macOS and Windows.)
-//         const osmium::MemoryUsage memory;
-
-//         std::cout << std::endl
-//                   << "Memory used: " << memory.peak() << " MBytes" <<
-//                   std::endl;
-//     } catch (const std::exception& e) {
-//         // All exceptions used by the Osmium library derive from
-//         std::exception. std::cerr << e.what() << std::endl; return false;
-//     }
-
-//     return true;
-// }
-
 namespace {
 using NodeID = osmium::object_id_type;
-using WayIDs = std::unordered_set<osmium::object_id_type>;
-using NodeWaysMap = std::unordered_map<NodeID, WayIDs>;
+struct WayNodePair {
+    osmium::object_id_type wayID;
+    size_t nodeIndex;
+
+    WayNodePair(osmium::object_id_type wID, size_t nIndex)
+        : wayID(wID), nodeIndex(nIndex) {}
+
+    bool operator==(const WayNodePair &other) const {
+        return wayID == other.wayID && nodeIndex == other.nodeIndex;
+    }
+};
+
+struct WayNodePairHash {
+    std::size_t operator()(const WayNodePair &p) const {
+        return std::hash<osmium::object_id_type>()(p.wayID) ^
+               (std::hash<size_t>()(p.nodeIndex) << 1);
+    }
+};
+
+using NodeWaysMap =
+    std::unordered_map<NodeID,
+                       std::unordered_set<WayNodePair, WayNodePairHash>>;
 using WayNameMap = std::unordered_map<osmium::object_id_type, std::string>;
 struct MappedWayData {
     NodeWaysMap nodeWaysMap;
@@ -152,11 +94,13 @@ struct NodeWayMapper : public osmium::handler::Handler {
             wayData_.wayNames[way.id()] = tag_value;
         }
 
-        for (const auto &node_ref : way.nodes()) {
+        for (size_t ii = 0; ii < way.nodes().size(); ++ii) {
+            const auto &node_ref = way.nodes()[ii];
             // Assume that we only get po
             assert(node_ref.ref() > 0);
-            auto &nodeList = wayData_.nodeWaysMap[node_ref.ref()];
-            nodeList.insert(way.id());
+            auto &nodeMap = wayData_.nodeWaysMap[node_ref.ref()];
+            nodeMap.emplace(way.id(), ii);
+            wayData_.wayNames[way.id()] = tag_value ? tag_value : "";
         }
     }
 };
@@ -187,14 +131,18 @@ struct NodeReducer : public osmium::handler::Handler {
             return;
         }
         // This node is part of one or more requested ways
-        for (const auto &wayID : it->second) {
+        for (const auto &way : it->second) {
             // Find or create the route for this wayID
-            routes_[wayID].nodes.push_back(node.location());
-            routes_[wayID].id = wayID;
-            if (routes_[wayID].name.empty()) {
-                routes_[wayID].name = wayData_.wayNames.count(wayID) > 0
-                                          ? wayData_.wayNames.at(wayID)
-                                          : "";
+            auto &route = routes_[way.wayID];
+            if (route.nodes.size() <= way.nodeIndex) {
+                route.nodes.resize(way.nodeIndex + 1);
+            }
+            route.nodes[way.nodeIndex] = node.location();
+            route.id = way.wayID;
+            if (route.name.empty()) {
+                route.name = wayData_.wayNames.count(way.wayID) > 0
+                                 ? wayData_.wayNames.at(way.wayID)
+                                 : "";
             }
         }
     }
@@ -229,6 +177,21 @@ OSMLoader::Ways OSMLoader::getWays(const CoordinateBounds &bounds) const {
 
     } catch (const std::exception &e) {
         std::cerr << e.what() << std::endl;
+    }
+
+    // clean up routes to remove any incomplete ways
+    for (auto it = routes.begin(); it != routes.end();) {
+        auto &way = it->second;
+        auto new_end =
+            std::remove_if(way.nodes.begin(), way.nodes.end(),
+                           [](const Coordinate &loc) { return !loc.valid(); });
+        way.nodes.erase(new_end, way.nodes.end());
+
+        if (way.nodes.empty()) {
+            it = routes.erase(it);
+        } else {
+            ++it;
+        }
     }
 
     return routes;
