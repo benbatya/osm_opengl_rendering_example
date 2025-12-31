@@ -41,7 +41,6 @@ class OpenGLCanvas : public wxGLCanvas {
 
     std::string GetShaderBuildLog() const { return shaderProgram_.lastBuildLog_.str(); }
 
-  private:
     bool InitializeOpenGLFunctions();
 
     // Update GPU buffers from `storedWays_` (called after GL init or when
@@ -50,6 +49,11 @@ class OpenGLCanvas : public wxGLCanvas {
 
     void Zoom(double scale, const wxPoint &mousePos);
 
+    // utility methods to convert from Viewport->OSM and OSM->Viewport
+    osmium::Location mapViewport2OSM(const wxPoint &viewportCoord);
+    wxPoint mapOSM2Viewport(const osmium::Location &coords);
+
+  private:
     wxGLContext *openGLContext_;
     bool isOpenGLInitialized_{false};
 
@@ -69,8 +73,13 @@ class OpenGLCanvas : public wxGLCanvas {
     GLuint EBO_{0};           // element buffer object
     GLsizei elementCount_{0}; // number of indices in the EBO
 
-    // Coordinate bounds of viewport
-    osmium::Box bounds_{};
+    // OSM Coordinate bounds
+    osmium::Box coordinateBounds_{};
+
+    // bounding box in viewport coordinate system
+    wxSize viewportSize_{};
+    wxRect viewportBounds_{};
+
     // Stored routes (kept so buffers can be uploaded after GL init)
     OSMLoader::Ways storedWays_{};
     // Draw commands: pair<count, byteOffsetInEBO>

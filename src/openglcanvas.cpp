@@ -117,12 +117,13 @@ OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs) 
     timer_.SetOwner(this);
     this->Bind(wxEVT_TIMER, &OpenGLCanvas::OnTimer, this);
 
+    // TODO: try to make the FPS higher
     constexpr auto FPS = 60.0;
     timer_.Start(1000 / FPS);
 }
 
 void OpenGLCanvas::SetWays(const OSMLoader::Ways &ways, const osmium::Box &bounds) {
-    bounds_ = bounds;
+    coordinateBounds_ = bounds;
     // Find the longest ways and store only those for testing
     storedWays_.clear();
 
@@ -344,6 +345,12 @@ bool OpenGLCanvas::InitializeOpenGL() {
     lastFpsUpdateTime_ = std::chrono::high_resolution_clock::now();
     framesSinceLastFps_ = 0;
 
+    auto initRect = GetClientRect();
+    initRect.SetSize(GetSize() * GetContentScaleFactor());
+
+    this->viewportBounds_ = initRect;
+    // std::cout << "InitializeOpenGL: called\n";
+
     wxCommandEvent evt(wxEVT_OPENGL_INITIALIZED);
     evt.SetEventObject(this);
     ProcessWindowEvent(evt);
@@ -367,13 +374,18 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     if (shaderProgram_.shaderProgram_.has_value()) {
         glUseProgram(shaderProgram_.shaderProgram_.value());
 
-        // upload bounds uniform: (minLon, minLat, lonRange, latRange)
-        double minLon = bounds_.left();
-        double maxLon = bounds_.right();
-        double minLat = bounds_.bottom();
-        double maxLat = bounds_.top();
-        double lonRange = (maxLon - minLon);
-        double latRange = (maxLat - minLat);
+        auto size = GetClientSize() * GetContentScaleFactor();
+        wxPoint bottomLeft{};
+        wxPoint topRight(size.x, size.y);
+
+        auto bottomLeftCoord = mapViewport2OSM(bottomLeft);
+        auto topRightCoord = mapViewport2OSM(topRight);
+        double minLon = bottomLeftCoord.lon();
+        double minLat = bottomLeftCoord.lat();
+
+        double lonRange = (topRightCoord.lon() - bottomLeftCoord.lon());
+        double latRange = (topRightCoord.lat() - bottomLeftCoord.lat());
+
         // Avoid zero ranges
         if (lonRange == 0.0)
             lonRange = 1.0;
@@ -430,6 +442,8 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
 }
 
 void OpenGLCanvas::OnSize(wxSizeEvent &event) {
+    // std::cout << "OnSize: called" << std::endl;
+
     bool firstApperance = IsShownOnScreen() && !isOpenGLInitialized_;
 
     if (firstApperance) {
@@ -441,6 +455,15 @@ void OpenGLCanvas::OnSize(wxSizeEvent &event) {
 
         auto viewPortSize = event.GetSize() * GetContentScaleFactor();
         glViewport(0, 0, viewPortSize.x, viewPortSize.y);
+
+        if (viewportSize_.GetWidth() > 0) {
+            auto vpPos = viewportBounds_.GetPosition();
+            vpPos += (viewPortSize - viewportSize_) / 2;
+            viewportBounds_.SetPosition(vpPos);
+        }
+
+        // Save the viewportSize for later
+        viewportSize_ = viewPortSize;
     }
 
     event.Skip();
@@ -458,7 +481,8 @@ void OpenGLCanvas::OnTimer(wxTimerEvent &WXUNUSED(event)) {
 void OpenGLCanvas::OnLeftDown(wxMouseEvent &event) {
     isDragging_ = true;
     lastMousePos_ = event.GetPosition();
-    CaptureMouse();
+    lastMousePos_.y = GetClientSize().y - lastMousePos_.y; // flip Y
+    // CaptureMouse();
 }
 
 void OpenGLCanvas::OnLeftUp(wxMouseEvent &event) {
@@ -476,53 +500,24 @@ void OpenGLCanvas::OnMouseMotion(wxMouseEvent &event) {
     if (!event.Dragging() || !event.LeftIsDown())
         return;
 
+    // std::cout << "OnMouseMotion: called" << std::endl;
+
     // compute pixel delta (use logical coordinates then account for content
     // scale)
     wxPoint pos = event.GetPosition();
+    pos.y = GetClientSize().y - pos.y; // flip Y
     // use content scale factor to match viewport used for GL
     auto scale = GetContentScaleFactor();
     wxPoint posScaled = pos * scale;
     wxPoint lastScaled = lastMousePos_ * scale;
 
-    int dx = posScaled.x - lastScaled.x;
-    int dy = posScaled.y - lastScaled.y;
-
-    auto viewPortSize = GetClientSize() * scale;
-    if (viewPortSize.x <= 0 || viewPortSize.y <= 0) {
-        lastMousePos_ = pos;
-        return;
-    }
-
-    double minLon = bounds_.left();
-    double maxLon = bounds_.right();
-    double minLat = bounds_.bottom();
-    double maxLat = bounds_.top();
-
-    double lonRange = (maxLon - minLon);
-    double latRange = (maxLat - minLat);
-    if (lonRange == 0.0)
-        lonRange = 1.0;
-    if (latRange == 0.0)
-        latRange = 1.0;
-
-    double w = static_cast<double>(viewPortSize.x);
-    double h = static_cast<double>(viewPortSize.y);
-
-    // map pixel delta to world delta: lonOffset = -(dx/w)*lonRange
-    // and latOffset = (dy/h)*latRange (note y pixel increases downwards)
-    double lonOffset = -static_cast<double>(dx) / w * lonRange;
-    double latOffset = static_cast<double>(dy) / h * latRange;
-
-    double newMinLon = minLon + lonOffset;
-    double newMaxLon = maxLon + lonOffset;
-    double newMinLat = minLat + latOffset;
-    double newMaxLat = maxLat + latOffset;
-
-    bounds_ = osmium::Box({newMinLon, newMinLat}, {newMaxLon, newMaxLat});
+    // Update viewportBounds_
+    auto newPos = viewportBounds_.GetPosition() + posScaled - lastScaled;
+    this->viewportBounds_.SetPosition(newPos);
 
     lastMousePos_ = pos;
 
-    // just request redraw; shader reads `bounds_` uniform during paint
+    // just request redraw; shader reads `coordinateBounds_` uniform during paint
     Refresh(false);
 }
 
@@ -562,54 +557,74 @@ void OpenGLCanvas::OnZoomGesture(wxZoomGestureEvent &event) {
     Zoom(scale, event.GetPosition());
 }
 
-void OpenGLCanvas::Zoom(double scale, const wxPoint &mousePos) {
-    // current bounds
-    double minLon = bounds_.left();
-    double maxLon = bounds_.right();
-    double minLat = bounds_.bottom();
-    double maxLat = bounds_.top();
-
-    double lonRange = (maxLon - minLon);
-    double latRange = (maxLat - minLat);
-    if (lonRange == 0.0 || latRange == 0.0)
+void OpenGLCanvas::Zoom(double scale, const wxPoint &mousePosIn) {
+    if (scale <= 0.0)
         return;
 
-    // Map mouse position to [0,1] in lon/lat space. Need to account for
-    // content scale factor used when setting the viewport.
-    auto viewPortSize = GetClientSize() * GetContentScaleFactor();
-    if (viewPortSize.x <= 0 || viewPortSize.y <= 0)
-        return;
+    double contentScale = GetContentScaleFactor();
 
-    auto pos = mousePos * GetContentScaleFactor();
-    double mx = static_cast<double>(pos.x);
-    double my = static_cast<double>(pos.y);
-    double w = static_cast<double>(viewPortSize.x);
-    double h = static_cast<double>(viewPortSize.y);
+    // Convert mouse position to the coordinate system used by viewportBounds_
+    // (Physical pixels, Y-up to match dragging logic in OnMouseMotion)
+    wxPoint mousePos = mousePosIn;
+    mousePos.y = GetClientSize().y - mousePos.y;
 
-    double xNorm = mx / w;
-    double yNorm = 1.0 - (my / h); // invert Y (wx origin is top-left)
+    double mx = static_cast<double>(mousePos.x) * contentScale;
+    double my = static_cast<double>(mousePos.y) * contentScale;
 
-    // clamp
-    xNorm = std::min(std::max(xNorm, 0.0), 1.0);
-    yNorm = std::min(std::max(yNorm, 0.0), 1.0);
+    // Current viewport box properties
+    double oldX = static_cast<double>(viewportBounds_.x);
+    double oldY = static_cast<double>(viewportBounds_.y);
+    double oldW = static_cast<double>(viewportBounds_.width);
+    double oldH = static_cast<double>(viewportBounds_.height);
 
-    double centerLon = minLon + xNorm * lonRange;
-    double centerLat = minLat + yNorm * latRange;
+    // Calculate relative position of mouse in the current viewport box [0, 1]
+    double tx = (mx - oldX) / oldW;
+    double ty = (my - oldY) / oldH;
 
-    double newLonRange = lonRange * scale;
-    double newLatRange = latRange * scale;
+    // New dimensions
+    double newW = oldW * scale;
+    double newH = oldH * scale;
 
-    const double kMinRange = 1e-12;
-    if (newLonRange < kMinRange || newLatRange < kMinRange)
-        return;
+    // New origin to keep the point under the mouse at the same relative position
+    double newX = mx - tx * newW;
+    double newY = my - ty * newH;
 
-    // Adjust new min/max to keep mouse position fixed in lon/lat space
-    double newMinLon = centerLon - newLonRange * xNorm;
-    double newMaxLon = centerLon + newLonRange * (1.0 - xNorm);
-    double newMinLat = centerLat - newLatRange * yNorm;
-    double newMaxLat = centerLat + newLatRange * (1.0 - yNorm);
+    // Update viewportBounds_
+    viewportBounds_.x = static_cast<int>(std::round(newX));
+    viewportBounds_.y = static_cast<int>(std::round(newY));
+    viewportBounds_.width = static_cast<int>(std::round(newW));
+    viewportBounds_.height = static_cast<int>(std::round(newH));
 
-    bounds_ = osmium::Box({newMinLon, newMinLat}, {newMaxLon, newMaxLat});
+    std::cout << "Zoom: called" << std::endl;
 
     Refresh(false);
+}
+
+osmium::Location OpenGLCanvas::mapViewport2OSM(const wxPoint &viewportCoord) {
+    const auto extents = viewportBounds_.GetSize();
+
+    const auto offset = viewportCoord - viewportBounds_.GetPosition();
+
+    auto normalized = static_cast<double>(offset.x) / (extents.x - 1);
+    double lon = coordinateBounds_.left() + normalized * (coordinateBounds_.right() - coordinateBounds_.left());
+
+    normalized = static_cast<double>(offset.y) / (extents.y - 1);
+    double lat = coordinateBounds_.bottom() + normalized * (coordinateBounds_.top() - coordinateBounds_.bottom());
+
+    return osmium::Location(lon, lat);
+}
+
+wxPoint OpenGLCanvas::mapOSM2Viewport(const osmium::Location &coords) {
+    const auto extents = viewportBounds_.GetSize();
+
+    double lonRange = (coordinateBounds_.right() - coordinateBounds_.left());
+    double latRange = (coordinateBounds_.top() - coordinateBounds_.bottom());
+
+    double xNorm = (coords.lon() - coordinateBounds_.left()) / lonRange;
+    double yNorm = (coords.lat() - coordinateBounds_.bottom()) / latRange;
+
+    int x = static_cast<int>(xNorm * extents.x) + viewportBounds_.GetLeft();
+    int y = static_cast<int>(yNorm * extents.y) + viewportBounds_.GetTop();
+
+    return wxPoint(x, y);
 }

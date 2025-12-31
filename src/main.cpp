@@ -105,7 +105,7 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
     this->Bind(wxEVT_OPENGL_INITIALIZED, &MyFrame::OnOpenGLInitialized, this);
 
     this->SetSize(FromDIP(wxSize(1200, 600)));
-    this->SetMinSize(FromDIP(wxSize(800, 400)));
+    this->SetMinSize(FromDIP(wxSize(400, 400)));
 
     this->Bind(wxEVT_SIZE, &MyFrame::OnSize, this);
 
