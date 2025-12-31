@@ -56,7 +56,7 @@ bool MyApp::OnInit() {
     osmLoader_ = std::make_shared<OSMLoader>();
     osmLoader_->setFilepath(osmDataFilePath_.ToStdString());
 
-    frame_ = new MyFrame("Hello OpenGL");
+    frame_ = new MyFrame("OpenStreetMap: " + osmDataFilePath_);
     if (!frame_->initialize(osmLoader_)) {
         return false;
     }

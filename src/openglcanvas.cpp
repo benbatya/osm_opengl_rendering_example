@@ -168,6 +168,7 @@ void OpenGLCanvas::SetWays(const OSMLoader::Ways &ways, const osmium::Box &bound
     // Take all ways
     storedWays_ = ways;
 
+    // add the boundary
     OSMLoader::Way boundsWay{};
     boundsWay.id = 42;
     boundsWay.name = "bounds";
