@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
+
 import xml.etree.ElementTree as ET
-from collections import defaultdict
+from collections import defaultdict, Counter
+import os
 
 def get_highway_attributes(file_path):
     try:
@@ -37,6 +40,49 @@ def get_highway_attributes(file_path):
     print(f"Total number of highway types: {len(highway_data)}")
     print(f"Total number of highways: {total_highways}")
 
+def analyze_osm_relations(file_path):
+    """
+    Parses an OSM file and analyzes tags within <relation> elements.
+    """
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return
+
+    tag_key_counter = Counter()
+    tag_kv_counter = Counter()
+    relation_count = 0
+
+    try:
+        # Use iterparse to handle potentially large OSM files without loading everything into memory
+        for event, elem in ET.iterparse(file_path, events=('end',)):
+            if elem.tag == 'relation':
+                relation_count += 1
+                for tag in elem.findall('tag'):
+                    k = tag.get('k')
+                    v = tag.get('v')
+                    if k:
+                        tag_key_counter[k] += 1
+                        if v:
+                            tag_kv_counter[f"{k}={v}"] += 1
+                elem.clear() # Free memory
+        
+        if relation_count == 0:
+            print("No relation elements found in the file.")
+            return
+
+        print(f"Analyzed {relation_count} relations.\n")
+        print("--- Most Common Tag Keys ---")
+        for k, count in tag_key_counter.most_common(5):
+            print(f"{k}: {count}")
+            
+        print("\n--- Most Common Tag Types (Key=Value) ---")
+        for kv, count in tag_kv_counter.most_common(10):
+            print(f"{kv}: {count}")
+
+    except ET.ParseError as e:
+        print(f"XML Parse Error: {e}")
 
 if __name__ == "__main__":
-    get_highway_attributes('/home/benjamin/Downloads/map.osm')
+    # get_highway_attributes('/home/benjamin/Downloads/map.osm')
+    analyze_osm_relations('/home/benjamin/Downloads/map.osm')
+
