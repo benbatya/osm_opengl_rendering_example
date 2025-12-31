@@ -2,7 +2,7 @@
 
 Renders OpenStreetMap (OSM) ways tagged as highways using OpenGL geometry shaders.
 
-[![Example](/Sausalito_Ways.png)](https://youtu.be/3e60l875eQU)
+[![Example](/usage.png)](https://youtu.be/3e60l875eQU)
 
 This small demo parses an OSM XML file and renders the ways that are tagged with `highway` using Geometry Shaders. The
 implementation is focused on demonstrating how to render large vector map datasets on the GPU efficiently using
