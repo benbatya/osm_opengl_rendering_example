@@ -150,15 +150,15 @@ struct WayHandler : public osmium::handler::Handler {
             }
         }
 
-        if (isWayInRelationship(way)) {
-            std::cout << "Relationship Way " << way.id() << " is in relationship ";
-            for (const auto &relationshipId : inputRelationships.way2Relationships.at(way.id())) {
-                std::cout << std::to_string(relationshipId);
-            }
-            std::array<char, 128> buffer;
-            std::snprintf(buffer.data(), buffer.size(), " and has %lu nodes\n", way.nodes().size());
-            std::cout << buffer.data();
-        }
+        // if (isWayInRelationship(way)) {
+        //     std::cout << "Relationship Way " << way.id() << " is in relationship ";
+        //     for (const auto &relationshipId : inputRelationships.way2Relationships.at(way.id())) {
+        //         std::cout << std::to_string(relationshipId);
+        //     }
+        //     std::array<char, 128> buffer;
+        //     std::snprintf(buffer.data(), buffer.size(), " and has %lu nodes\n", way.nodes().size());
+        //     std::cout << buffer.data();
+        // }
         const size_t offset = isWayInRelationship(way) ? way.nodes().size() : 0;
         for (size_t ii = 0; ii < way.nodes().size(); ++ii) {
             const auto &node_ref = way.nodes()[ii];
@@ -333,11 +333,27 @@ std::optional<OSMLoader::OSMData> OSMLoader::getData(const CoordinateBounds &bou
         // }
 
         // TODO: remove invalid areas
+        std::unordered_set<osmium::object_id_type> invalidAreas;
         for (auto &area : areas) {
             auto &outerRing = area.second.outerRing;
             if (outerRing.empty()) {
-                std::cout << "Relationship " << area.first << " has no outer ring" << std::endl;
+                std::cout << "Area " << area.first << " has no outer ring" << std::endl;
                 continue;
+            }
+            // close the area
+            if (outerRing.front() != outerRing.back()) {
+                std::cout << "Area " << area.first << " beginning and end vertices do not match\n";
+                // outerRing.push_back(outerRing.front());
+            } else {
+                invalidAreas.insert(area.first);
+            }
+        }
+
+        for (auto it = areas.begin(); it != areas.end();) {
+            if (invalidAreas.count(it->first) > 0) {
+                it = areas.erase(it);
+            } else {
+                ++it;
             }
         }
 

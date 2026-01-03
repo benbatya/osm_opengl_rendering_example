@@ -53,6 +53,11 @@ class OpenGLCanvas : public wxGLCanvas {
     osmium::Location mapViewport2OSM(const wxPoint &viewportCoord);
     wxPoint mapOSM2Viewport(const osmium::Location &coords);
 
+    using Color_t = std::array<GLfloat, 3>;
+    void AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &coords, const Color_t &color,
+                                        std::vector<float> &vertices, std::vector<GLuint> &indices,
+                                        size_t &indexOffset);
+
   private:
     wxGLContext *openGLContext_;
     bool isOpenGLInitialized_{false};
