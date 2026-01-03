@@ -122,10 +122,13 @@ OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs) 
     timer_.Start(1000 / FPS);
 }
 
-void OpenGLCanvas::SetWays(const OSMLoader::Id2Way &ways, const osmium::Box &bounds) {
+void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bounds) {
+    const auto &ways = data.first;
+    // TODO: render relationships
+    const auto &relationships = data.second;
     coordinateBounds_ = bounds;
     // Find the longest ways and store only those for testing
-    storedWays_.clear();
+    storedRoutes_.clear();
 
     // const size_t NUM_WAYS = std::min(ways.size(), static_cast<size_t>(1));
 
@@ -147,9 +150,9 @@ void OpenGLCanvas::SetWays(const OSMLoader::Id2Way &ways, const osmium::Box &bou
     //     for (auto wayId : lenIdMap[length]) {
     //         if (count >= NUM_WAYS)
     //             break;
-    //         storedWays_[wayId] = ways.at(wayId);
+    //         storedRoutes_[wayId] = ways.at(wayId);
     //         std::cout << "Selected way ID " << wayId << ", '"
-    //                   << storedWays_.at(wayId).name << "' with length "
+    //                   << storedRoutes_.at(wayId).name << "' with length "
     //                   << length << std::endl;
     //         ++count;
     //     }
@@ -166,18 +169,18 @@ void OpenGLCanvas::SetWays(const OSMLoader::Id2Way &ways, const osmium::Box &bou
     // }
 
     // Take all ways
-    storedWays_ = ways;
+    storedRoutes_ = ways;
 
     // add the boundary
-    OSMLoader::Ways_t boundsWay{};
+    OSMLoader::Route_t boundsWay{};
     boundsWay.id = 42;
-    boundsWay.name = "bounds";
+    boundsWay.tags[NAME_TAG] = "bounds";
     boundsWay.nodes = {osmium::Location(bounds.left(), bounds.bottom()),
                        osmium::Location(bounds.right(), bounds.bottom()),
                        osmium::Location(bounds.right(), bounds.top()), osmium::Location(bounds.left(), bounds.top()),
                        osmium::Location(bounds.left(), bounds.bottom())};
-    boundsWay.strType = "footpath";
-    storedWays_[boundsWay.id] = boundsWay;
+    boundsWay.tags[HIGHWAY_TAG] = "footpath";
+    storedRoutes_[boundsWay.id] = boundsWay;
 
     if (isOpenGLInitialized_) {
         UpdateBuffersFromRoutes();
@@ -191,7 +194,7 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     std::vector<GLuint> indices;
     drawCommands_.clear();
 
-    if (storedWays_.empty()) {
+    if (storedRoutes_.empty()) {
         elementCount_ = 0;
         return;
     }
@@ -208,14 +211,14 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     FLOAT_VEC3 DEFAULT_COLOR = {0.5f, 0.5f, 0.5f};
 
     size_t indexOffset = 0;
-    for (const auto &entry : storedWays_) {
+    for (const auto &entry : storedRoutes_) {
         const auto &coords = entry.second;
         if (coords.nodes.size() < 2)
             continue;
 
         GLuint base = static_cast<GLuint>(vertices.size() / 5);
-        const auto &color =
-            HIGHWAY2COLOR.count(entry.second.strType) == 0 ? DEFAULT_COLOR : HIGHWAY2COLOR.at(entry.second.strType);
+        const std::string &highwayType = entry.second.tags.at(HIGHWAY_TAG);
+        const auto &color = HIGHWAY2COLOR.count(highwayType) == 0 ? DEFAULT_COLOR : HIGHWAY2COLOR.at(highwayType);
 
         for (const auto &loc : coords.nodes) {
             assert(loc.valid());

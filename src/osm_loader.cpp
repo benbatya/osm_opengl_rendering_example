@@ -72,6 +72,7 @@ using Id2Ids = std::unordered_map<osmium::object_id_type, std::unordered_set<osm
 struct RelationshipData {
     Id2Ids way2Relationships;  // all of the ways that are referenced by relationships
     Id2Ids node2Relationships; // all of the nodes that are referenced by relationships
+    Id2String node2Roles;
     OSMLoader::Id2Tags id2Tags;
 };
 
@@ -91,10 +92,8 @@ struct RelationshipHandler : public osmium::handler::Handler {
                     relationshipData.way2Relationships[member.ref()].insert(relation.id());
                 }
             } else if (member.type() == osmium::item_type::node) {
-                // TODO: handle other node types
-                if (member.role() == "label") {
-                    relationshipData.node2Relationships[member.ref()].insert(relation.id());
-                }
+                relationshipData.node2Relationships[member.ref()].insert(relation.id());
+                relationshipData.node2Roles[member.ref()] = member.role();
             }
         }
 
@@ -128,11 +127,13 @@ struct WayHandler : public osmium::handler::Handler {
         auto &wayData = this->wayData;
 
         if (isWayAValidRoute(way)) {
-            auto tag_value = way.tags().get_value_by_key(HIGHWAY_TAG);
-            wayData.id2Tags[way.id()][HIGHWAY_TAG] = tag_value;
+            const auto &tags = way.tags();
 
-            tag_value = way.tags().get_value_by_key(NAME_TAG);
-            if (tag_value) {
+            if (auto tag_value = tags.get_value_by_key(HIGHWAY_TAG); tag_value) {
+                wayData.id2Tags[way.id()][HIGHWAY_TAG] = tag_value;
+            }
+
+            if (auto tag_value = tags.get_value_by_key(NAME_TAG); tag_value) {
                 wayData.id2Tags[way.id()][NAME_TAG] = tag_value;
             }
         }
@@ -152,8 +153,8 @@ struct NodeHandler : public osmium::handler::Handler {
     const MappedWayData &wayData_;
     const RelationshipData &relationshipData_;
 
-    OSMLoader::Id2Way routes_;
-    OSMLoader::Id2Relationship areas_;
+    OSMLoader::Id2Route routes_;
+    OSMLoader::Id2Area areas_;
 
     NodeHandler(const osmium::Box &bounds, const MappedWayData &wayData, const RelationshipData &relationshipData)
         : bounds_(bounds), wayData_(wayData), relationshipData_(relationshipData) {}
@@ -168,44 +169,48 @@ struct NodeHandler : public osmium::handler::Handler {
             return;
         }
 
-        // TODO: check if node is in relationship
-
-        // check if node is in way
-        auto it = wayData_.node2Ways.find(node.id());
-        if (it == wayData_.node2Ways.end()) {
-            return;
-        }
-        // This node is part of one or more requested ways
-        for (const auto &way : it->second) {
-            // Find or create the route for this wayID
-            auto &route = routes_[way.wayID];
-            if (route.nodes.size() <= way.nodeIndex) {
-                route.nodes.resize(way.nodeIndex + 1);
+        // check if node is in relationship
+        if (auto it = relationshipData_.node2Relationships.find(node.id());
+            it != relationshipData_.node2Relationships.end()) {
+            for (const auto &relationshipId : it->second) {
+                auto &area = areas_[relationshipId];
+                OSMLoader::AreaNode aNode{
+                    .id = node.id(),
+                    .role = relationshipData_.node2Roles.at(node.id()),
+                    .location = node.location(),
+                };
+                area.nodes.push_back(aNode);
             }
-            route.nodes[way.nodeIndex] = node.location();
-            route.id = way.wayID;
-            // TODO: fix this
-            route.tags[NAME_TAG] =
-                wayData_.id2tags[NAME_TAG].count(way.wayID) > 0 ? wayData_.way2Name.at(way.wayID) : "";
         }
-        if (route.type.empty()) {
-            route.type = wayData_.highway2Type.count(way.wayID) > 0 ? wayData_.highway2Type.at(way.wayID) : "";
+
+        // check if node is in a way
+        if (auto it = wayData_.node2Ways.find(node.id()); it != wayData_.node2Ways.end()) {
+            // This node is part of one or more requested ways
+            for (const auto &way : it->second) {
+                // Find or create the route for this wayID
+                auto &route = routes_[way.wayID];
+                if (route.nodes.size() <= way.nodeIndex) {
+                    route.nodes.resize(way.nodeIndex + 1);
+                }
+                route.nodes[way.nodeIndex] = node.location();
+                route.id = way.wayID;
+                const auto &tags = wayData_.id2Tags.at(way.wayID);
+
+                route.tags[NAME_TAG] = tags.count(NAME_TAG) > 0 ? tags.at(NAME_TAG) : "";
+                route.tags[HIGHWAY_TAG] = tags.count(HIGHWAY_TAG) > 0 ? tags.at(HIGHWAY_TAG) : "";
+            }
         }
     }
-}
 };
 
 } // namespace
 
-OSMLoader::Id2Way OSMLoader::getWays(const CoordinateBounds &bounds) const {
-    Id2Way routes;
-    Id2Relationship relationships;
-
-    RelationshipData relationshipData;
+OSMLoader::OSMData OSMLoader::getData(const CoordinateBounds &bounds) const {
+    OSMData data;
 
     if (filepath_.empty()) {
         std::cerr << "No input file specified." << std::endl;
-        return routes;
+        return data;
     }
 
     try {
@@ -224,43 +229,53 @@ OSMLoader::Id2Way OSMLoader::getWays(const CoordinateBounds &bounds) const {
         osmium::apply(wayReader, wayHandler);
         wayReader.close();
         const auto &wayData = wayHandler.wayData;
-        const auto &finalRelationships = wayHandler.finalRelationships;
 
         //
         // 2) find the nodes which were requested in (1) and are within bounds
         // and build a buffer to hold them
         osmium::io::Reader nodeReader{input_file, osmium::osm_entity_bits::node};
-        NodeHandler nodeHandler(bounds, wayHandler.wayData, relationshipData, routes);
+        NodeHandler nodeHandler(bounds, wayData, relationshipData);
         osmium::apply(nodeReader, nodeHandler);
         nodeReader.close();
+        auto &routes = nodeHandler.routes_;
+        auto &areas = nodeHandler.areas_;
+
+        // clean up routes to remove any incomplete ways
+        for (auto it = routes.begin(); it != routes.end();) {
+            auto &way = it->second;
+            auto new_end =
+                std::remove_if(way.nodes.begin(), way.nodes.end(), [](const Coordinate &loc) { return !loc.valid(); });
+            way.nodes.erase(new_end, way.nodes.end());
+
+            if (way.nodes.empty()) {
+                it = routes.erase(it);
+            } else {
+                ++it;
+            }
+        }
+
+        // TODO: remove invalid areas
+        for (auto &area : areas) {
+            auto &outerRing = area.second.outerRing;
+            if (outerRing.empty()) {
+                std::cout << "Relationship " << area.first << " has no outer ring" << std::endl;
+                continue;
+            }
+        }
+
+        // Uncomment for data analysis
+        // std::unordered_map<std::string, uint32_t> types;
+        // for (const auto &entry : routes) {
+        //     types[entry.second.type] += 1;
+        // }
+        // std::cout << "Highway types:" << std::endl;
+        // for (const auto &type : types) {
+        //     std::cout << type.first << ": " << type.second << std::endl;
+        // }
+
+        return std::make_pair(routes, areas);
 
     } catch (const std::exception &e) {
         std::cerr << e.what() << std::endl;
     }
-
-    // clean up routes to remove any incomplete ways
-    for (auto it = routes.begin(); it != routes.end();) {
-        auto &way = it->second;
-        auto new_end =
-            std::remove_if(way.nodes.begin(), way.nodes.end(), [](const Coordinate &loc) { return !loc.valid(); });
-        way.nodes.erase(new_end, way.nodes.end());
-
-        if (way.nodes.empty()) {
-            it = routes.erase(it);
-        } else {
-            ++it;
-        }
-    }
-
-    // Uncomment for data analysis
-    // std::unordered_map<std::string, uint32_t> types;
-    // for (const auto &entry : routes) {
-    //     types[entry.second.type] += 1;
-    // }
-    // std::cout << "Highway types:" << std::endl;
-    // for (const auto &type : types) {
-    //     std::cout << type.first << ": " << type.second << std::endl;
-    // }
-
-    return routes;
 }

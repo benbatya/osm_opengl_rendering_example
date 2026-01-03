@@ -111,17 +111,27 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
 
     const auto bounds = osmium::Box({-122.50035, 37.84373}, {-122.46780, 37.85918});
 
-    auto ways = osmLoader_->getWays(bounds);
-    std::cout << "Loaded " << ways.size() << " ways from OSM data." << std::endl;
+    auto data = osmLoader_->getData(bounds);
+    const auto &routes = data.first;
+    std::cout << "Loaded " << routes.size() << " routes from OSM data." << std::endl;
+    const auto &areas = data.second;
+    std::cout << "Loaded " << areas.size() << " areas from OSM data." << std::endl;
     int nodeCount = 0;
-    for (const auto &wayPair : ways) {
-        nodeCount += static_cast<int>(wayPair.second.nodes.size());
+    for (const auto &route : routes) {
+        nodeCount += static_cast<int>(route.second.nodes.size());
     }
-    std::cout << "Total nodes in loaded ways: " << nodeCount << std::endl;
+    std::cout << "Total nodes in loaded routes: " << nodeCount << std::endl;
+    nodeCount = 0;
+    for (const auto &area : areas) {
+        nodeCount += static_cast<int>(area.second.nodes.size());
+        nodeCount += static_cast<int>(area.second.outerRing.size());
+    }
+    std::cout << "Total nodes in loaded areas: " << nodeCount << std::endl;
+
     // Upload ways into the OpenGL canvas so it can replace the
     // VBO/EBO.
     if (openGLCanvas) {
-        openGLCanvas->SetWays(ways, bounds);
+        openGLCanvas->SetData(data, bounds);
     }
 
     return true;

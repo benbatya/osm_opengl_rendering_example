@@ -4,6 +4,7 @@
 #include <osmium/osm/location.hpp>
 #include <osmium/osm/types.hpp>
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,20 +29,27 @@ class OSMLoader {
 
     // Represents both Areas (closed=true) and Ways (closed=false)
     // Areas will have the first and last nodes match to ensure that it is closed
-    struct Way_t {
+    struct Route_t {
         osmium::object_id_type id{0};
         Coordinates nodes;
         Tags tags;
     };
-    using Id2Way = std::unordered_map<osmium::object_id_type, Way_t>;
+    using Id2Route = std::unordered_map<osmium::object_id_type, Route_t>;
 
-    struct Relationship_t {
+    struct AreaNode {
+        osmium::object_id_type id{0};
+        std::string role;
+        osmium::Location location;
+    };
+
+    struct Area_t {
         osmium::object_id_type id{0};
         Coordinates outerRing;
         // std::vector<Coordinates> innerRings;
+        std::vector<AreaNode> nodes{};
         Tags tags;
     };
-    using Id2Relationship = std::unordered_map<osmium::object_id_type, Relationship_t>;
+    using Id2Area = std::unordered_map<osmium::object_id_type, Area_t>;
 
     using CoordinateBounds = osmium::Box;
     /**
@@ -50,8 +58,8 @@ class OSMLoader {
      * @return A vector of routes, where each route is represented as a vector
      * of coordinates
      */
-    using OSMData = std::pair<Id2Way, Id2Relationship>;
-    OSMData getWays(const CoordinateBounds &bounds) const;
+    using OSMData = std::pair<Id2Route, Id2Area>;
+    OSMData getData(const CoordinateBounds &bounds) const;
 
   protected:
     std::string filepath_{};
