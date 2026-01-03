@@ -79,12 +79,17 @@ struct RelationshipData {
 struct RelationshipHandler : public osmium::handler::Handler {
     RelationshipData relationshipData;
 
-    void relation(const osmium::Relation &relation) noexcept {
-        auto tag_value = relation.tags().get_value_by_key(::TYPE_TAG);
+    bool containsTagValue(const osmium::TagList &tags, const char *key, const char *value) {
+        auto tag_value = tags.get_value_by_key(key);
+        return tag_value && std::strcmp(tag_value, value) == 0;
+    }
 
-        if (std::strcmp(tag_value, ::BOUNDARY_VALUE) != 0) {
+    void relation(const osmium::Relation &relation) noexcept {
+        if (!(containsTagValue(relation.tags(), ::TYPE_TAG, ::BOUNDARY_VALUE) ||
+              containsTagValue(relation.tags(), ::BUILDING_TAG, ::YES_VALUE))) {
             return;
         }
+
         for (const auto &member : relation.members()) {
             if (member.type() == osmium::item_type::way) {
                 // TODO: handle inner ways
@@ -125,6 +130,14 @@ struct WayHandler : public osmium::handler::Handler {
         }
 
         auto &wayData = this->wayData;
+
+        if (isWayInRelationship(way)) {
+            std::cout << "Way " << way.id() << " is in relationship ";
+            for (const auto &relationshipId : inputRelationships.way2Relationships.at(way.id())) {
+                std::cout << std::to_string(relationshipId);
+            }
+            std::cout << std::endl;
+        }
 
         if (isWayInRelationship(way)) {
             const auto &tags = way.tags();
@@ -195,22 +208,43 @@ struct NodeHandler : public osmium::handler::Handler {
         if (auto it = wayData_.node2Ways.find(node.id()); it != wayData_.node2Ways.end()) {
             // This node is part of one or more requested ways
             for (const auto &way : it->second) {
-                // Find or create the route for this wayID
-                auto &route = routes_[way.wayID];
-                if (route.nodes.size() <= way.nodeIndex) {
-                    route.nodes.resize(way.nodeIndex + 1);
-                }
-                route.nodes[way.nodeIndex] = node.location();
-                route.id = way.wayID;
-                if (wayData_.id2Tags.count(way.wayID) > 0) {
-                    const auto &tags = wayData_.id2Tags.at(way.wayID);
-                    route.tags[NAME_TAG] = tags.count(NAME_TAG) > 0 ? tags.at(NAME_TAG) : "";
-                    route.tags[HIGHWAY_TAG] = tags.count(HIGHWAY_TAG) > 0 ? tags.at(HIGHWAY_TAG) : "";
+                if (relationshipData_.way2Relationships.count(way.wayID) > 0) {
+                    for (const auto &relationship : relationshipData_.way2Relationships.at(way.wayID)) {
+                        auto &area = areas_[relationship];
+                        if (area.outerRing.empty()) {
+                            populateWay(node, way.nodeIndex, area.outerRing);
+                        }
+                    }
+                } else {
+                    // Find or create the route for this wayID
+                    auto &route = routes_[way.wayID];
+                    populateWay(node, way.nodeIndex, route.nodes);
+                    route.id = way.wayID;
+                    if (wayData_.id2Tags.count(way.wayID) > 0) {
+                        const auto &tags = wayData_.id2Tags.at(way.wayID);
+                        route.tags[NAME_TAG] = tags.count(NAME_TAG) > 0 ? tags.at(NAME_TAG) : "";
+                        route.tags[HIGHWAY_TAG] = tags.count(HIGHWAY_TAG) > 0 ? tags.at(HIGHWAY_TAG) : "";
+                    }
                 }
             }
         }
     }
+
+    void populateWay(const osmium::Node &node, const int nodeIndex, OSMLoader::Coordinates &nodes) {
+        if (nodes.size() <= nodeIndex) {
+            nodes.resize(nodeIndex + 1);
+        }
+        nodes[nodeIndex] = node.location();
+    }
 };
+
+bool cleanupWay(OSMLoader::Coordinates &nodes) {
+    auto new_end =
+        std::remove_if(nodes.begin(), nodes.end(), [](const OSMLoader::Coordinate &loc) { return !loc.valid(); });
+    nodes.erase(new_end, nodes.end());
+
+    return nodes.empty();
+}
 
 } // namespace
 
@@ -252,34 +286,50 @@ std::optional<OSMLoader::OSMData> OSMLoader::getData(const CoordinateBounds &bou
         // clean up routes to remove any incomplete ways
         for (auto it = routes.begin(); it != routes.end();) {
             auto &way = it->second;
-            auto new_end =
-                std::remove_if(way.nodes.begin(), way.nodes.end(), [](const Coordinate &loc) { return !loc.valid(); });
-            way.nodes.erase(new_end, way.nodes.end());
-
-            if (way.nodes.empty()) {
+            if (cleanupWay(way.nodes)) {
                 it = routes.erase(it);
+            } else {
+                ++it;
+            }
+
+            // auto new_end =
+            //     std::remove_if(way.nodes.begin(), way.nodes.end(), [](const Coordinate &loc) { return !loc.valid();
+            //     });
+            // way.nodes.erase(new_end, way.nodes.end());
+
+            // if (way.nodes.empty()) {
+            //     it = routes.erase(it);
+            // } else {
+            //     ++it;
+            // }
+        }
+
+        for (auto it = areas.begin(); it != areas.end();) {
+            auto &area = it->second;
+            if (cleanupWay(area.outerRing)) {
+                it = areas.erase(it);
             } else {
                 ++it;
             }
         }
 
-        // move routes -> Area_t::outerRing
-        for (const auto &way : relationshipData.way2Relationships) {
-            if (!routes.count(way.first)) {
-                continue;
-            }
-            const auto &route = routes.at(way.first);
-            for (auto &area : way.second) {
-                if (areas.count(area)) {
-                    // TODO: figure out how to allow more then one outerRing
-                    if (areas.at(area).outerRing.empty()) {
-                        areas.at(area).outerRing = routes.at(way.first).nodes;
-                    }
-                }
-            }
-            // TODO: maybe allow a way to be both a route and an area outer/inner
-            routes.erase(way.first);
-        }
+        // // move routes -> Area_t::outerRing
+        // for (const auto &way : relationshipData.way2Relationships) {
+        //     if (!routes.count(way.first)) {
+        //         continue;
+        //     }
+        //     const auto &route = routes.at(way.first);
+        //     for (auto &area : way.second) {
+        //         if (areas.count(area)) {
+        //             // TODO: figure out how to allow more then one outerRing
+        //             auto &outerRing = areas.at(area).outerRing;
+        //             outerRing.reserve(outerRing.size() + route.nodes.size());
+        //             std::copy(route.nodes.begin(), route.nodes.end(), std::back_inserter(outerRing));
+        //         }
+        //     }
+        //     // TODO: maybe allow a way to be both a route and an area outer/inner
+        //     routes.erase(way.first);
+        // }
 
         // TODO: remove invalid areas
         for (auto &area : areas) {

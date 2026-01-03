@@ -12,6 +12,8 @@ constexpr auto NAME_TAG = "name";
 constexpr auto HIGHWAY_TAG = "highway";
 constexpr auto TYPE_TAG = "type";
 constexpr auto BOUNDARY_VALUE = "boundary";
+constexpr auto BUILDING_TAG = "building";
+constexpr auto YES_VALUE = "yes";
 
 class OSMLoader {
   public:
