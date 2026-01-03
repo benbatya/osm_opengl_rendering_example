@@ -88,7 +88,7 @@ struct RelationshipHandler : public osmium::handler::Handler {
         for (const auto &member : relation.members()) {
             if (member.type() == osmium::item_type::way) {
                 // TODO: handle inner ways
-                if (member.role() == "outer") {
+                if (strcmp(member.role(), "outer") == 0) {
                     relationshipData.way2Relationships[member.ref()].insert(relation.id());
                 }
             } else if (member.type() == osmium::item_type::node) {
@@ -126,6 +126,13 @@ struct WayHandler : public osmium::handler::Handler {
 
         auto &wayData = this->wayData;
 
+        if (isWayInRelationship(way)) {
+            const auto &tags = way.tags();
+            if (auto tag_value = tags.get_value_by_key(TYPE_TAG); tag_value) {
+                wayData.id2Tags[way.id()][TYPE_TAG] = tag_value;
+            }
+        }
+
         if (isWayAValidRoute(way)) {
             const auto &tags = way.tags();
 
@@ -137,6 +144,7 @@ struct WayHandler : public osmium::handler::Handler {
                 wayData.id2Tags[way.id()][NAME_TAG] = tag_value;
             }
         }
+
         for (size_t ii = 0; ii < way.nodes().size(); ++ii) {
             const auto &node_ref = way.nodes()[ii];
             // Assume that we only get po
@@ -194,10 +202,11 @@ struct NodeHandler : public osmium::handler::Handler {
                 }
                 route.nodes[way.nodeIndex] = node.location();
                 route.id = way.wayID;
-                const auto &tags = wayData_.id2Tags.at(way.wayID);
-
-                route.tags[NAME_TAG] = tags.count(NAME_TAG) > 0 ? tags.at(NAME_TAG) : "";
-                route.tags[HIGHWAY_TAG] = tags.count(HIGHWAY_TAG) > 0 ? tags.at(HIGHWAY_TAG) : "";
+                if (wayData_.id2Tags.count(way.wayID) > 0) {
+                    const auto &tags = wayData_.id2Tags.at(way.wayID);
+                    route.tags[NAME_TAG] = tags.count(NAME_TAG) > 0 ? tags.at(NAME_TAG) : "";
+                    route.tags[HIGHWAY_TAG] = tags.count(HIGHWAY_TAG) > 0 ? tags.at(HIGHWAY_TAG) : "";
+                }
             }
         }
     }
@@ -205,7 +214,7 @@ struct NodeHandler : public osmium::handler::Handler {
 
 } // namespace
 
-OSMLoader::OSMData OSMLoader::getData(const CoordinateBounds &bounds) const {
+std::optional<OSMLoader::OSMData> OSMLoader::getData(const CoordinateBounds &bounds) const {
     OSMData data;
 
     if (filepath_.empty()) {
@@ -254,6 +263,24 @@ OSMLoader::OSMData OSMLoader::getData(const CoordinateBounds &bounds) const {
             }
         }
 
+        // move routes -> Area_t::outerRing
+        for (const auto &way : relationshipData.way2Relationships) {
+            if (!routes.count(way.first)) {
+                continue;
+            }
+            const auto &route = routes.at(way.first);
+            for (auto &area : way.second) {
+                if (areas.count(area)) {
+                    // TODO: figure out how to allow more then one outerRing
+                    if (areas.at(area).outerRing.empty()) {
+                        areas.at(area).outerRing = routes.at(way.first).nodes;
+                    }
+                }
+            }
+            // TODO: maybe allow a way to be both a route and an area outer/inner
+            routes.erase(way.first);
+        }
+
         // TODO: remove invalid areas
         for (auto &area : areas) {
             auto &outerRing = area.second.outerRing;
@@ -278,4 +305,6 @@ OSMLoader::OSMData OSMLoader::getData(const CoordinateBounds &bounds) const {
     } catch (const std::exception &e) {
         std::cerr << e.what() << std::endl;
     }
+
+    return std::nullopt;
 }

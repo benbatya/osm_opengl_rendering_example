@@ -112,9 +112,12 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
     const auto bounds = osmium::Box({-122.50035, 37.84373}, {-122.46780, 37.85918});
 
     auto data = osmLoader_->getData(bounds);
-    const auto &routes = data.first;
+    if (!data) {
+        return false;
+    }
+    const auto &routes = data->first;
     std::cout << "Loaded " << routes.size() << " routes from OSM data." << std::endl;
-    const auto &areas = data.second;
+    const auto &areas = data->second;
     std::cout << "Loaded " << areas.size() << " areas from OSM data." << std::endl;
     int nodeCount = 0;
     for (const auto &route : routes) {
@@ -131,7 +134,7 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
     // Upload ways into the OpenGL canvas so it can replace the
     // VBO/EBO.
     if (openGLCanvas) {
-        openGLCanvas->SetData(data, bounds);
+        openGLCanvas->SetData(*data, bounds);
     }
 
     return true;

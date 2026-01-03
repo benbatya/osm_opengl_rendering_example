@@ -59,7 +59,7 @@ class OSMLoader {
      * of coordinates
      */
     using OSMData = std::pair<Id2Route, Id2Area>;
-    OSMData getData(const CoordinateBounds &bounds) const;
+    std::optional<OSMData> getData(const CoordinateBounds &bounds) const;
 
   protected:
     std::string filepath_{};
