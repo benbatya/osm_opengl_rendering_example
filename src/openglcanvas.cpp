@@ -221,7 +221,7 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
             continue;
 
         GLuint base = static_cast<GLuint>(vertices.size() / 5);
-        const auto &color = BROWN_COLOR;
+        auto color = BROWN_COLOR;
 
         for (const auto &loc : coords) {
             assert(loc.valid());
@@ -256,47 +256,48 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
         indexOffset += countHere;
     }
 
-    for (const auto &entry : storedRoutes_) {
-        const auto &coords = entry.second;
-        if (coords.nodes.size() < 2)
-            continue;
+    // TODO: uncomment this!!
+    // for (const auto &entry : storedRoutes_) {
+    //     const auto &coords = entry.second;
+    //     if (coords.nodes.size() < 2)
+    //         continue;
 
-        GLuint base = static_cast<GLuint>(vertices.size() / 5);
-        const std::string &highwayType = entry.second.tags.at(HIGHWAY_TAG);
-        const auto &color = HIGHWAY2COLOR.count(highwayType) == 0 ? DEFAULT_COLOR : HIGHWAY2COLOR.at(highwayType);
+    //     GLuint base = static_cast<GLuint>(vertices.size() / 5);
+    //     const std::string &highwayType = entry.second.tags.at(HIGHWAY_TAG);
+    //     const auto &color = HIGHWAY2COLOR.count(highwayType) == 0 ? DEFAULT_COLOR : HIGHWAY2COLOR.at(highwayType);
 
-        for (const auto &loc : coords.nodes) {
-            assert(loc.valid());
-            double lon = loc.lon();
-            double lat = loc.lat();
-            // store raw lon/lat in vertex attributes; shader will normalize
-            vertices.push_back(static_cast<float>(lon));
-            vertices.push_back(static_cast<float>(lat));
-            vertices.push_back(color[0]);
-            vertices.push_back(color[1]);
-            vertices.push_back(color[2]);
-        }
+    //     for (const auto &loc : coords.nodes) {
+    //         assert(loc.valid());
+    //         double lon = loc.lon();
+    //         double lat = loc.lat();
+    //         // store raw lon/lat in vertex attributes; shader will normalize
+    //         vertices.push_back(static_cast<float>(lon));
+    //         vertices.push_back(static_cast<float>(lat));
+    //         vertices.push_back(color[0]);
+    //         vertices.push_back(color[1]);
+    //         vertices.push_back(color[2]);
+    //     }
 
-        // indices for GL_LINE_STRIP_ADJACENCY: duplicate first and last
-        GLuint countHere = 0;
-        // start: duplicate first
-        indices.push_back(base);
-        countHere += 1;
+    //     // indices for GL_LINE_STRIP_ADJACENCY: duplicate first and last
+    //     GLuint countHere = 0;
+    //     // start: duplicate first
+    //     indices.push_back(base);
+    //     countHere += 1;
 
-        for (size_t i = 0; i < (vertices.size() / 5) - base; ++i) {
-            indices.push_back(base + static_cast<GLuint>(i));
-            ++countHere;
-        }
+    //     for (size_t i = 0; i < (vertices.size() / 5) - base; ++i) {
+    //         indices.push_back(base + static_cast<GLuint>(i));
+    //         ++countHere;
+    //     }
 
-        // duplicate last
-        indices.push_back(base + static_cast<GLuint>((vertices.size() / 5) - 1 - base));
-        countHere += 1;
+    //     // duplicate last
+    //     indices.push_back(base + static_cast<GLuint>((vertices.size() / 5) - 1 - base));
+    //     countHere += 1;
 
-        // record draw command (count, byte offset)
-        size_t startByteOffset = indexOffset * sizeof(GLuint);
-        drawCommands_.emplace_back(static_cast<GLsizei>(countHere), startByteOffset);
-        indexOffset += countHere;
-    }
+    //     // record draw command (count, byte offset)
+    //     size_t startByteOffset = indexOffset * sizeof(GLuint);
+    //     drawCommands_.emplace_back(static_cast<GLsizei>(countHere), startByteOffset);
+    //     indexOffset += countHere;
+    // }
 
     elementCount_ = static_cast<GLsizei>(indices.size());
 

@@ -211,9 +211,8 @@ struct NodeHandler : public osmium::handler::Handler {
                 if (relationshipData_.way2Relationships.count(way.wayID) > 0) {
                     for (const auto &relationship : relationshipData_.way2Relationships.at(way.wayID)) {
                         auto &area = areas_[relationship];
-                        if (area.outerRing.empty()) {
-                            populateWay(node, way.nodeIndex, area.outerRing);
-                        }
+                        // if (area.outerRing.empty()) {
+                        populateWay(node, way.nodeIndex, area.outerRing);
                     }
                 } else {
                     // Find or create the route for this wayID
