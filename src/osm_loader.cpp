@@ -89,7 +89,8 @@ struct RelationshipHandler : public osmium::handler::Handler {
 
     void relation(const osmium::Relation &relation) noexcept {
         if (!(containsTagValue(relation.tags(), ::TYPE_TAG, ::BOUNDARY_VALUE) ||
-              containsTagValue(relation.tags(), ::BUILDING_TAG, ::YES_VALUE))) {
+              containsTagValue(relation.tags(), ::BUILDING_TAG, ::YES_VALUE) ||
+              containsTagValue(relation.tags(), ::AREA_TAG, ::YES_VALUE))) {
             return;
         }
 
@@ -130,7 +131,9 @@ struct WayHandler : public osmium::handler::Handler {
     bool isWayInRelationship(const osmium::Way &way) const {
         return inputRelationships_.way2Relationships.count(way.id()) > 0;
     }
-    bool isWayAValidRoute(const osmium::Way &way) const { return way.tags().get_value_by_key(HIGHWAY_TAG) != nullptr; }
+    bool isWayAValidRoute(const osmium::Way &way) const {
+        return way.tags().get_value_by_key(HIGHWAY_TAG) != nullptr || way.tags().get_value_by_key(AREA_TAG) != nullptr;
+    }
 
     void way(const osmium::Way &way) noexcept {
         if (!(isWayInRelationship(way) || isWayAValidRoute(way))) {
