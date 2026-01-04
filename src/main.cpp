@@ -127,7 +127,9 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
     nodeCount = 0;
     for (const auto &area : areas) {
         nodeCount += static_cast<int>(area.second.nodes.size());
-        nodeCount += static_cast<int>(area.second.outerRing.size());
+        for (const auto &outerRing : area.second.outerRings) {
+            nodeCount += static_cast<int>(outerRing.size());
+        }
     }
     std::cout << "Total nodes in loaded areas: " << nodeCount << std::endl;
 

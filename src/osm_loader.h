@@ -46,7 +46,7 @@ class OSMLoader {
 
     struct Area_t {
         osmium::object_id_type id{0};
-        Coordinates outerRing;
+        std::vector<Coordinates> outerRings;
         // std::vector<Coordinates> innerRings;
         std::vector<AreaNode> nodes{};
         Tags tags;

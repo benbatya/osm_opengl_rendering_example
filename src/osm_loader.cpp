@@ -45,25 +45,28 @@
 #include <iostream> // for std::cout, std::cerr
 #include <unordered_set>
 namespace {
-struct WayNodePair {
-    osmium::object_id_type wayID;
-    size_t nodeIndex;
+struct IdIndexPair {
+    osmium::object_id_type pairID;
+    int64_t pairIndex;
 
-    WayNodePair(osmium::object_id_type wID, size_t nIndex) : wayID(wID), nodeIndex(nIndex) {}
+    IdIndexPair(osmium::object_id_type wID, int64_t nIndex) : pairID(wID), pairIndex(nIndex) {}
 
-    bool operator==(const WayNodePair &other) const { return wayID == other.wayID && nodeIndex == other.nodeIndex; }
+    bool operator==(const IdIndexPair &other) const { return pairID == other.pairID && pairIndex == other.pairIndex; }
 };
 
-struct WayNodePairHash {
-    std::size_t operator()(const WayNodePair &p) const {
-        return std::hash<osmium::object_id_type>()(p.wayID) ^ (std::hash<size_t>()(p.nodeIndex) << 1);
+struct IdIndexPairHash {
+    std::size_t operator()(const IdIndexPair &p) const {
+        return std::hash<osmium::object_id_type>()(p.pairID) ^ (std::hash<int64_t>()(p.pairIndex) << 1);
     }
 };
 
-using Id2Ways = std::unordered_map<osmium::object_id_type, std::unordered_set<WayNodePair, WayNodePairHash>>;
+using Id2IdIndexMap = std::unordered_map<osmium::object_id_type, std::unordered_set<IdIndexPair, IdIndexPairHash>>;
 using Id2String = std::unordered_map<osmium::object_id_type, std::string>;
+using Id2Index = std::unordered_map<osmium::object_id_type, int64_t>;
+using Id2Id2Index = std::unordered_map<osmium::object_id_type, Id2Index>;
+
 struct MappedWayData {
-    Id2Ways node2Ways;
+    Id2IdIndexMap node2Ways;
     OSMLoader::Id2Tags id2Tags;
 };
 
@@ -113,14 +116,19 @@ struct RelationshipHandler : public osmium::handler::Handler {
 
 struct WayHandler : public osmium::handler::Handler {
     // Map of Node IDs -> Way IDs to be retrieved later
-    const RelationshipData &inputRelationships;
+    const RelationshipData &inputRelationships_;
 
+    Id2Index relationship2RingIndex{};
+    Id2Id2Index way2Relationship2RingIndex{};
     MappedWayData wayData;
 
-    WayHandler(const RelationshipData &relationshipData) : inputRelationships(relationshipData) {}
+    // size_t largestWaySize = 0;
+    // osmium::object_id_type largestWayID = 0;
+
+    WayHandler(const RelationshipData &relationshipData) : inputRelationships_(relationshipData) {}
 
     bool isWayInRelationship(const osmium::Way &way) const {
-        return inputRelationships.way2Relationships.count(way.id()) > 0;
+        return inputRelationships_.way2Relationships.count(way.id()) > 0;
     }
     bool isWayAValidRoute(const osmium::Way &way) const { return way.tags().get_value_by_key(HIGHWAY_TAG) != nullptr; }
 
@@ -129,6 +137,11 @@ struct WayHandler : public osmium::handler::Handler {
             return;
         }
 
+        // if (way.nodes().size() > largestWaySize) {
+        //     largestWaySize = way.nodes().size();
+        //     largestWayID = way.id();
+        // }
+
         auto &wayData = this->wayData;
 
         if (isWayInRelationship(way)) {
@@ -136,6 +149,17 @@ struct WayHandler : public osmium::handler::Handler {
             if (auto tag_value = tags.get_value_by_key(TYPE_TAG); tag_value) {
                 wayData.id2Tags[way.id()][TYPE_TAG] = tag_value;
             }
+
+            std::cout << "Relationship Way " << way.id() << " is in relationship ";
+            for (const auto &relationshipId : inputRelationships_.way2Relationships.at(way.id())) {
+                auto &ringIndex = relationship2RingIndex[relationshipId];
+                way2Relationship2RingIndex[way.id()][relationshipId] = ringIndex;
+                std::cout << relationshipId << ", ringIndx=" << ringIndex << ", ";
+                ++ringIndex;
+            }
+            std::array<char, 128> buffer;
+            std::snprintf(buffer.data(), buffer.size(), " and has %lu nodes\n", way.nodes().size());
+            std::cout << buffer.data();
         }
 
         if (isWayAValidRoute(way)) {
@@ -150,22 +174,15 @@ struct WayHandler : public osmium::handler::Handler {
             }
         }
 
-        // if (isWayInRelationship(way)) {
-        //     std::cout << "Relationship Way " << way.id() << " is in relationship ";
-        //     for (const auto &relationshipId : inputRelationships.way2Relationships.at(way.id())) {
-        //         std::cout << std::to_string(relationshipId);
-        //     }
-        //     std::array<char, 128> buffer;
-        //     std::snprintf(buffer.data(), buffer.size(), " and has %lu nodes\n", way.nodes().size());
-        //     std::cout << buffer.data();
-        // }
-        const size_t offset = isWayInRelationship(way) ? way.nodes().size() : 0;
+        if (isWayInRelationship(way)) {
+        }
+        // const size_t offset = isWayInRelationship(way) ? way.nodes().size() : 0;
         for (size_t ii = 0; ii < way.nodes().size(); ++ii) {
             const auto &node_ref = way.nodes()[ii];
             // Assume that we only get po
             assert(node_ref.ref() > 0);
             auto &nodeMap = wayData.node2Ways[node_ref.ref()];
-            nodeMap.emplace(way.id(), ii + offset);
+            nodeMap.emplace(way.id(), ii); // + offset);
         }
     }
 };
@@ -175,12 +192,15 @@ struct NodeHandler : public osmium::handler::Handler {
     const osmium::Box &bounds_;
     const MappedWayData &wayData_;
     const RelationshipData &relationshipData_;
+    const Id2Id2Index &way2Relationship2RingIndex_;
 
     OSMLoader::Id2Route routes_;
     OSMLoader::Id2Area areas_;
 
-    NodeHandler(const osmium::Box &bounds, const MappedWayData &wayData, const RelationshipData &relationshipData)
-        : bounds_(bounds), wayData_(wayData), relationshipData_(relationshipData) {}
+    NodeHandler(const osmium::Box &bounds, const MappedWayData &wayData, const RelationshipData &relationshipData,
+                const Id2Id2Index &way2Relationship2RingIndex)
+        : bounds_(bounds), wayData_(wayData), relationshipData_(relationshipData),
+          way2Relationship2RingIndex_(way2Relationship2RingIndex) {}
 
     void node(const osmium::Node &node) noexcept {
         if (!node.location().valid()) {
@@ -210,19 +230,23 @@ struct NodeHandler : public osmium::handler::Handler {
         if (auto it = wayData_.node2Ways.find(node.id()); it != wayData_.node2Ways.end()) {
             // This node is part of one or more requested ways
             for (const auto &way : it->second) {
-                if (relationshipData_.way2Relationships.count(way.wayID) > 0) {
-                    for (const auto &relationship : relationshipData_.way2Relationships.at(way.wayID)) {
-                        auto &area = areas_[relationship];
-                        // if (area.outerRing.empty()) {
-                        populateWay(node, way.nodeIndex, area.outerRing);
+                if (relationshipData_.way2Relationships.count(way.pairID) > 0) {
+                    for (const auto &relationshipId : relationshipData_.way2Relationships.at(way.pairID)) {
+                        auto &area = areas_[relationshipId];
+                        const auto &ringIdx = way2Relationship2RingIndex_.at(way.pairID).at(relationshipId);
+                        if (ringIdx >= area.outerRings.size()) {
+                            area.outerRings.resize(ringIdx + 1);
+                        }
+                        auto &outerRing = area.outerRings.at(ringIdx);
+                        populateWay(node, way.pairIndex, outerRing);
                     }
                 } else {
                     // Find or create the route for this wayID
-                    auto &route = routes_[way.wayID];
-                    populateWay(node, way.nodeIndex, route.nodes);
-                    route.id = way.wayID;
-                    if (wayData_.id2Tags.count(way.wayID) > 0) {
-                        const auto &tags = wayData_.id2Tags.at(way.wayID);
+                    auto &route = routes_[way.pairID];
+                    populateWay(node, way.pairIndex, route.nodes);
+                    route.id = way.pairID;
+                    if (wayData_.id2Tags.count(way.pairID) > 0) {
+                        const auto &tags = wayData_.id2Tags.at(way.pairID);
                         route.tags[NAME_TAG] = tags.count(NAME_TAG) > 0 ? tags.at(NAME_TAG) : "";
                         route.tags[HIGHWAY_TAG] = tags.count(HIGHWAY_TAG) > 0 ? tags.at(HIGHWAY_TAG) : "";
                     }
@@ -274,11 +298,14 @@ std::optional<OSMLoader::OSMData> OSMLoader::getData(const CoordinateBounds &bou
         wayReader.close();
         const auto &wayData = wayHandler.wayData;
 
+        // std::cout << "Largest way " << wayHandler.largestWayID << ", size: " << wayHandler.largestWaySize <<
+        // std::endl;
+
         //
         // 2) find the nodes which were requested in (1) and are within bounds
         // and build a buffer to hold them
         osmium::io::Reader nodeReader{input_file, osmium::osm_entity_bits::node};
-        NodeHandler nodeHandler(bounds, wayData, relationshipData);
+        NodeHandler nodeHandler(bounds, wayData, relationshipData, wayHandler.way2Relationship2RingIndex);
         osmium::apply(nodeReader, nodeHandler);
         nodeReader.close();
         auto &routes = nodeHandler.routes_;
@@ -305,12 +332,20 @@ std::optional<OSMLoader::OSMData> OSMLoader::getData(const CoordinateBounds &bou
             // }
         }
 
-        for (auto it = areas.begin(); it != areas.end();) {
-            auto &area = it->second;
-            if (cleanupWay(area.outerRing)) {
-                it = areas.erase(it);
-            } else {
-                ++it;
+        for (auto &[k, v] : areas) {
+            for (auto it = v.outerRings.begin(); it != v.outerRings.end();) {
+                if (cleanupWay(*it)) {
+                    std::cout << "cleaning up area " << k << " outer ring " << std::distance(v.outerRings.begin(), it)
+                              << std::endl;
+                    it = v.outerRings.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            // If there's no valid outerRing, then remove the area
+            if (v.outerRings.empty()) {
+                std::cout << "Erasing area " << k << " since it has no valid outer ring" << std::endl;
+                areas.erase(k);
             }
         }
 
@@ -332,30 +367,18 @@ std::optional<OSMLoader::OSMData> OSMLoader::getData(const CoordinateBounds &bou
         //     routes.erase(way.first);
         // }
 
-        // TODO: remove invalid areas
-        std::unordered_set<osmium::object_id_type> invalidAreas;
-        for (auto &area : areas) {
-            auto &outerRing = area.second.outerRing;
-            if (outerRing.empty()) {
-                std::cout << "Area " << area.first << " has no outer ring" << std::endl;
-                continue;
-            }
-            // close the area
-            if (outerRing.front() != outerRing.back()) {
-                std::cout << "Area " << area.first << " beginning and end vertices do not match\n";
-                // outerRing.push_back(outerRing.front());
-            } else {
-                invalidAreas.insert(area.first);
-            }
-        }
-
-        for (auto it = areas.begin(); it != areas.end();) {
-            if (invalidAreas.count(it->first) > 0) {
-                it = areas.erase(it);
-            } else {
-                ++it;
-            }
-        }
+        // for (auto &area : areas) {
+        //     auto &outerRing = area.second.outerRing;
+        //     if (outerRing.empty()) {
+        //         std::cout << "Area " << area.first << " has no outer ring" << std::endl;
+        //         continue;
+        //     }
+        //     // close the area
+        //     if (outerRing.front() != outerRing.back()) {
+        //         std::cout << "Closing area " << area.first << " since beginning and end vertices do not match\n";
+        //         // outerRing.push_back(outerRing.front());
+        //     }
+        // }
 
         // Uncomment for data analysis
         // std::unordered_map<std::string, uint32_t> types;

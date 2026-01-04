@@ -275,10 +275,11 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
 
     auto color = AREA_COLOR;
     for (const auto &area : storedAreas_) {
-        const auto &coords = area.second.outerRing;
-        AddLineStripAdjacencyToBuffers(coords, color, vertices, indices, indexOffset);
-        for (auto &component : color) {
-            component *= 0.8f;
+        for (const auto &outerRing : area.second.outerRings) {
+            AddLineStripAdjacencyToBuffers(outerRing, color, vertices, indices, indexOffset);
+            for (auto &component : color) {
+                component *= 0.8f;
+            }
         }
     }
 
