@@ -13,6 +13,76 @@
 
 wxDEFINE_EVENT(wxEVT_OPENGL_INITIALIZED, wxCommandEvent);
 
+static const char *map_compute_source = R"(
+#version 430 core
+layout(local_size_x = 128) in;
+layout(rgba8, binding = 0) uniform image2D imgOutput;
+
+struct Vertex {
+    float x, y;
+    float r, g, b;
+};
+
+layout(std430, binding = 1) buffer VertexBuffer {
+    Vertex vertices[];
+};
+
+layout(std430, binding = 2) buffer IndexBuffer {
+    uint indices[];
+};
+
+uniform vec4 uBounds; // minLon, minLat, lonRange, latRange
+uniform ivec2 uScreenSize;
+uniform uint uNumIndices;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= uNumIndices - 1) return;
+
+    uint i1 = indices[idx];
+    uint i2 = indices[idx+1];
+    if (i1 == i2) return;
+
+    Vertex v1 = vertices[i1];
+    Vertex v2 = vertices[i2];
+    
+    vec2 p1 = vec2((v1.x - uBounds.x) / uBounds.z * uScreenSize.x,
+                   (v1.y - uBounds.y) / uBounds.w * uScreenSize.y);
+    vec2 p2 = vec2((v2.x - uBounds.x) / uBounds.z * uScreenSize.x,
+                   (v2.y - uBounds.y) / uBounds.w * uScreenSize.y);
+
+    vec2 dir = p2 - p1;
+    float len = length(dir);
+    if (len < 0.1) return;
+    
+    vec3 color = vec3(v1.r, v1.g, v1.b);
+    for (float i = 0; i <= len; i += 0.5) {
+        imageStore(imgOutput, ivec2(p1 + (dir/len) * i), vec4(color, 1.0));
+    }
+}
+)";
+
+static const char *display_v_source = R"(
+#version 430 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec2 aTexCoord;
+out vec2 TexCoord;
+void main() {
+    gl_Position = vec4(aPos, 0.0, 1.0);
+    TexCoord = aTexCoord;
+}
+)";
+
+static const char *display_f_source = R"(
+#version 430 core
+in vec2 TexCoord;
+out vec4 FragColor;
+uniform sampler2D screenTexture;
+void main() {
+    FragColor = texture(screenTexture, TexCoord);
+}
+)";
+
 // GL debug callback function used when KHR_debug is available. Logs
 // messages (skips notifications) through wxLogError and stderr for
 // high-severity messages.
@@ -92,7 +162,7 @@ static void GLDebugCallbackFunc(GLenum source, GLenum type, GLuint id, GLenum se
 
 OpenGLCanvas::OpenGLCanvas(wxWindow *parent, const wxGLAttributes &canvasAttrs) : wxGLCanvas(parent, canvasAttrs) {
     wxGLContextAttrs ctxAttrs;
-    ctxAttrs.PlatformDefaults().CoreProfile().OGLVersion(3, 3).EndList();
+    ctxAttrs.PlatformDefaults().CoreProfile().OGLVersion(4, 3).EndList();
     openGLContext_ = new wxGLContext(this, nullptr, &ctxAttrs);
 
     if (!openGLContext_->IsOK()) {
@@ -264,16 +334,6 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
 
     size_t indexOffset = 0;
 
-    auto color = AREA_COLOR;
-    for (const auto &area : storedAreas_) {
-        for (const auto &outerRing : area.second.outerRings) {
-            AddLineStripAdjacencyToBuffers(outerRing, color, vertices, indices, indexOffset);
-            for (auto &component : color) {
-                component *= 0.8f;
-            }
-        }
-    }
-
     for (const auto &entry : storedRoutes_) {
         const auto &coords = entry.second;
         if (coords.nodes.size() < 2)
@@ -316,23 +376,45 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
 }
 
 void OpenGLCanvas::CompileShaderProgram() {
-    shaderProgram_.vertexShaderSource_ = VertexShader;
-    shaderProgram_.geometryShaderSource_ = GeometryShader;
-    shaderProgram_.fragmentShaderSource_ = FragmentShader;
-    shaderProgram_.Build();
+    auto compile = [](GLenum type, const char *src) {
+        GLuint s = glCreateShader(type);
+        glShaderSource(s, 1, &src, nullptr);
+        glCompileShader(s);
+        GLint success;
+        glGetShaderiv(s, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            char infoLog[512];
+            glGetShaderInfoLog(s, 512, nullptr, infoLog);
+            std::cerr << "Shader compilation error: " << infoLog << std::endl;
+        }
+        return s;
+    };
 
-    if (!GetShaderBuildLog().empty()) {
-        std::cerr << "Shader failed to compile." << std::endl;
-        std::cerr << GetShaderBuildLog() << std::endl;
-        throw std::runtime_error("Shader compilation error");
-    }
+    GLuint cs = compile(GL_COMPUTE_SHADER, map_compute_source);
+    map_compute_program_ = glCreateProgram();
+    glAttachShader(map_compute_program_, cs);
+    glLinkProgram(map_compute_program_);
+    glDeleteShader(cs);
+
+    GLuint vs = compile(GL_VERTEX_SHADER, display_v_source);
+    GLuint fs = compile(GL_FRAGMENT_SHADER, display_f_source);
+    display_program_ = glCreateProgram();
+    glAttachShader(display_program_, vs);
+    glAttachShader(display_program_, fs);
+    glLinkProgram(display_program_);
+    glDeleteShader(vs);
+    glDeleteShader(fs);
 }
 
 OpenGLCanvas::~OpenGLCanvas() {
     glDeleteVertexArrays(1, &VAO_);
     glDeleteBuffers(1, &VBO_);
-
     glDeleteBuffers(1, &EBO_);
+    glDeleteTextures(1, &render_texture_);
+    glDeleteVertexArrays(1, &quad_vao_);
+    glDeleteBuffers(1, &quad_vbo_);
+    glDeleteProgram(map_compute_program_);
+    glDeleteProgram(display_program_);
 
     delete openGLContext_;
 }
@@ -380,6 +462,20 @@ bool OpenGLCanvas::InitializeOpenGL() {
         wxLogDebug("KHR_debug not available; GL debug output disabled");
     }
 
+    // Setup quad for display
+    float quadVertices[] = {
+        -1.0f, 1.0f, 0.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
+    };
+    glGenVertexArrays(1, &quad_vao_);
+    glGenBuffers(1, &quad_vbo_);
+    glBindVertexArray(quad_vao_);
+    glBindBuffer(GL_ARRAY_BUFFER, quad_vbo_);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
+
     CompileShaderProgram();
 
     isOpenGLInitialized_ = true;
@@ -421,44 +517,55 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     glClearColor(clearColor, clearColor, clearColor, 0.5f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (shaderProgram_.shaderProgram_.has_value()) {
-        glUseProgram(shaderProgram_.shaderProgram_.value());
+    auto size = GetClientSize() * GetContentScaleFactor();
+    wxPoint bottomLeft{};
+    wxPoint topRight(size.x, size.y);
 
-        auto size = GetClientSize() * GetContentScaleFactor();
-        wxPoint bottomLeft{};
-        wxPoint topRight(size.x, size.y);
+    auto bottomLeftCoord = mapViewport2OSM(bottomLeft);
+    auto topRightCoord = mapViewport2OSM(topRight);
+    double minLon = bottomLeftCoord.lon();
+    double minLat = bottomLeftCoord.lat();
 
-        auto bottomLeftCoord = mapViewport2OSM(bottomLeft);
-        auto topRightCoord = mapViewport2OSM(topRight);
-        double minLon = bottomLeftCoord.lon();
-        double minLat = bottomLeftCoord.lat();
+    double lonRange = (topRightCoord.lon() - bottomLeftCoord.lon());
+    double latRange = (topRightCoord.lat() - bottomLeftCoord.lat());
 
-        double lonRange = (topRightCoord.lon() - bottomLeftCoord.lon());
-        double latRange = (topRightCoord.lat() - bottomLeftCoord.lat());
+    if (lonRange == 0.0)
+        lonRange = 1.0;
+    if (latRange == 0.0)
+        latRange = 1.0;
 
-        // Avoid zero ranges
-        if (lonRange == 0.0)
-            lonRange = 1.0;
-        if (latRange == 0.0)
-            latRange = 1.0;
-        GLint loc = glGetUniformLocation(shaderProgram_.shaderProgram_.value(), "uBounds");
-        if (loc >= 0) {
-            glUniform4f(loc, static_cast<float>(minLon), static_cast<float>(minLat), static_cast<float>(lonRange),
-                        static_cast<float>(latRange));
-        }
+    // 1. Clear texture
+    GLuint fbo;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render_texture_, 0);
+    glClearColor(clearColor, clearColor, clearColor, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glDeleteFramebuffers(1, &fbo);
 
-        glBindVertexArray(VAO_);
-        if (!drawCommands_.empty()) {
-            for (const auto &cmd : drawCommands_) {
-                GLsizei count = cmd.first;
-                const void *offset = reinterpret_cast<const void *>(cmd.second);
-                glDrawElements(GL_LINE_STRIP_ADJACENCY, count, GL_UNSIGNED_INT, offset);
-            }
-        } else {
-            glDrawElements(GL_LINE_STRIP_ADJACENCY, elementCount_, GL_UNSIGNED_INT, 0);
-        }
-        glBindVertexArray(0); // Unbind VAO_ for safety
-    }
+    // 2. Dispatch compute
+    glUseProgram(map_compute_program_);
+    glUniform4f(glGetUniformLocation(map_compute_program_, "uBounds"), static_cast<float>(minLon),
+                static_cast<float>(minLat), static_cast<float>(lonRange), static_cast<float>(latRange));
+    glUniform2i(glGetUniformLocation(map_compute_program_, "uScreenSize"), size.x, size.y);
+    glUniform1ui(glGetUniformLocation(map_compute_program_, "uNumIndices"), static_cast<GLuint>(elementCount_));
+
+    glBindImageTexture(0, render_texture_, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, VBO_);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, EBO_);
+
+    glDispatchCompute((elementCount_ + 127) / 128, 1, 1);
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+    // 3. Draw quad
+    glUseProgram(display_program_);
+    glBindVertexArray(quad_vao_);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, render_texture_);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+
     SwapBuffers();
 
     // Update FPS counters and draw overlay text
@@ -514,6 +621,15 @@ void OpenGLCanvas::OnSize(wxSizeEvent &event) {
 
         // Save the viewportSize for later
         viewportSize_ = viewPortSize;
+
+        // Recreate texture
+        if (render_texture_)
+            glDeleteTextures(1, &render_texture_);
+        glGenTextures(1, &render_texture_);
+        glBindTexture(GL_TEXTURE_2D, render_texture_);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, viewPortSize.x, viewPortSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     }
 
     event.Skip();

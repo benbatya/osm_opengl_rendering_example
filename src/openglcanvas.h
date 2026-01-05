@@ -39,7 +39,7 @@ class OpenGLCanvas : public wxGLCanvas {
   protected:
     void CompileShaderProgram();
 
-    std::string GetShaderBuildLog() const { return shaderProgram_.lastBuildLog_.str(); }
+    // std::string GetShaderBuildLog() const { return shaderProgram_.lastBuildLog_.str(); }
 
     bool InitializeOpenGLFunctions();
 
@@ -62,7 +62,8 @@ class OpenGLCanvas : public wxGLCanvas {
     wxGLContext *openGLContext_;
     bool isOpenGLInitialized_{false};
 
-    ShaderProgram shaderProgram_{};
+    GLuint map_compute_program_{0};
+    GLuint display_program_{0};
 
     wxTimer timer_;
     std::chrono::high_resolution_clock::time_point openGLInitializationTime_{};
@@ -77,6 +78,10 @@ class OpenGLCanvas : public wxGLCanvas {
     GLuint VBO_{0};           // vertex buffer object
     GLuint EBO_{0};           // element buffer object
     GLsizei elementCount_{0}; // number of indices in the EBO
+
+    GLuint render_texture_{0};
+    GLuint quad_vao_{0};
+    GLuint quad_vbo_{0};
 
     // OSM Coordinate bounds
     osmium::Box coordinateBounds_{};
