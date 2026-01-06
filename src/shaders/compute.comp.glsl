@@ -54,8 +54,10 @@ void main() {
     if (id >= uNumIndices) return;
 
     uint idx = indices[id];
-    uint idxPrev = idx;
-    uint idxNext = idx;
+    if (idx == 0) return;
+
+    uint idxPrev = 0;
+    uint idxNext = 0;
     
     InputVertex v = fetchVertex(idx);
     vec2 p = mapToScreen(v.lon, v.lat);
@@ -67,42 +69,42 @@ void main() {
     
     if (id > 0) {
         idxPrev = indices[id - 1];
-        if (idxPrev != idx) {
+        if (idxPrev != 0) {
             InputVertex v_prev = fetchVertex(idxPrev);
             p_prev = mapToScreen(v_prev.lon, v_prev.lat);
         }
     }
     if (id < uNumIndices - 1) {
         idxNext = indices[id + 1];
-        if (idxNext != idx) {
+        if (idxNext != 0) {
             InputVertex v_next = fetchVertex(idxNext);
             p_next = mapToScreen(v_next.lon, v_next.lat);
         }
     }
 
-    if(idx == idxPrev) {
-        idxNext = idx;
-        p_next = p;
-    }
+    // if(idx == idxPrev) {
+    //     idxNext = idx;
+    //     p_next = p;
+    // }
 
-    if(idx == idxNext) {
-        idxPrev = idx;
-        p_prev = p;
-    }
+    // if(idx == idxNext) {
+    //     idxPrev = idx;
+    //     p_prev = p;
+    // }
 
     vec2 dir = vec2(0.0);
-    if (idxNext != idx) dir += normalize(p_next - p);
-    if (idxPrev != idx) dir += normalize(p - p_prev);
+    if (idxNext != 0) dir += normalize(p_next - p);
+    if (idxPrev != 0) dir += normalize(p - p_prev);
     if (length(dir) > 0.0) {
         dir = normalize(dir);
         normal = vec2(-dir.y, dir.x);
     }
 
     float halfWidth = uWidth * 0.5;
-    outputVertices[id * 2].pos = p + normal * halfWidth;
-    outputVertices[id * 2]._pad = vec2(0.0);
-    outputVertices[id * 2].color = color;
-    outputVertices[id * 2 + 1].pos = p - normal * halfWidth;
-    outputVertices[id * 2 + 1]._pad = vec2(0.0);
-    outputVertices[id * 2 + 1].color = color;
+    outputVertices[idx * 2].pos = p + normal * halfWidth;
+    outputVertices[idx * 2]._pad = vec2(0.0);
+    outputVertices[idx * 2].color = color;
+    outputVertices[idx * 2 + 1].pos = p - normal * halfWidth;
+    outputVertices[idx * 2 + 1]._pad = vec2(0.0);
+    outputVertices[idx * 2 + 1].color = color;
 }

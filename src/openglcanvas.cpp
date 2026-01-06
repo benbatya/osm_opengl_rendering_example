@@ -196,7 +196,9 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
     }
 
     // Store the starting index for this line strip in the vertices array
-    GLuint base = static_cast<GLuint>(vertices.size() / 5);
+    GLuint base = static_cast<GLuint>(indexOffset);
+
+    vertices.reserve(vertices.size() + coords.size() * 5);
 
     // Add vertices for the current line strip
     for (const auto &loc : coords) {
@@ -215,18 +217,20 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
     // This is required for the geometry shader to calculate normals for the end segments.
     GLuint countHere = 0;
 
-    // Start: duplicate first vertex
-    indices.push_back(base);
-    countHere += 1;
+    // // Start: duplicate first vertex
+    // indices.push_back(base);
+    // countHere += 1;
 
     // Add all vertices of the current line strip
-    for (size_t i = 0; i < (vertices.size() / 5) - base; ++i) {
-        indices.push_back(base + static_cast<GLuint>(i));
+    for (size_t ii = base; ii < vertices.size() / 5; ++ii) {
+        indices.push_back(static_cast<GLuint>(ii));
         ++countHere;
     }
 
     // End: duplicate last vertex
-    indices.push_back(base + static_cast<GLuint>((vertices.size() / 5) - 1 - base));
+    // indices.push_back(base + static_cast<GLuint>((vertices.size() / 5) - 1 - base));
+    // End: truncate the last index in the route
+    indices.push_back(0);
     countHere += 1;
 
     // Record draw command (count, byte offset)
@@ -269,9 +273,9 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     Color_t AREA_COLOR = {0.2f, 0.89f, 0.1f};
 
     // Start with bogus vertex so we can have a null index
-    // vertices.resize(5, 0.0f);
+    vertices.resize(5, 0.0f);
 
-    size_t indexOffset = 0;
+    size_t indexOffset = vertices.size() / 5;
 
     for (const auto &entry : storedRoutes_) {
         const auto &coords = entry.second;
@@ -423,6 +427,7 @@ bool OpenGLCanvas::InitializeOpenGL() {
     float quadVertices[] = {
         -1.0f, 1.0f, 0.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 0.0f,
     };
+
     glGenVertexArrays(1, &quad_vao_);
     glGenBuffers(1, &quad_vbo_);
     glBindVertexArray(quad_vao_);
