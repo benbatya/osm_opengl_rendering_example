@@ -82,6 +82,8 @@ class OpenGLCanvas : public wxGLCanvas {
     GLuint render_texture_{0};
     GLuint quad_vao_{0};
     GLuint quad_vbo_{0};
+    GLuint output_vbo_{0};
+    GLuint output_vao_{0};
 
     // OSM Coordinate bounds
     osmium::Box coordinateBounds_{};

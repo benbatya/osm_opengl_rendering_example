@@ -1,7 +1,5 @@
 #include "openglcanvas.h"
 
-#include <shaders.h>
-
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -12,6 +10,121 @@
 #include <vector>
 
 wxDEFINE_EVENT(wxEVT_OPENGL_INITIALIZED, wxCommandEvent);
+
+static const char *ComputeShaderSource = R"(
+#version 430 core
+layout(local_size_x = 128) in;
+
+struct InputVertex {
+    float lon;
+    float lat;
+    float r;
+    float g;
+    float b;
+};
+
+struct OutputVertex {
+    vec2 pos;
+    vec2 _pad;
+    vec4 color;
+};
+
+layout(std430, binding = 1) readonly buffer InputVBO {
+    float inputData[];
+};
+
+layout(std430, binding = 2) readonly buffer InputEBO {
+    uint indices[];
+};
+
+layout(std430, binding = 3) writeonly buffer OutputVBO {
+    OutputVertex outputVertices[];
+};
+
+uniform vec4 uBounds;
+uniform vec2 uScreenSize;
+uniform uint uNumIndices;
+uniform float uWidth;
+
+vec2 mapToScreen(float lon, float lat) {
+    float x = (lon - uBounds.x) / uBounds.z;
+    float y = (lat - uBounds.y) / uBounds.w;
+    return vec2(x * uScreenSize.x, y * uScreenSize.y);
+}
+
+InputVertex fetchVertex(uint index) {
+    uint base = index * 5;
+    InputVertex v;
+    v.lon = inputData[base];
+    v.lat = inputData[base + 1];
+    v.r = inputData[base + 2];
+    v.g = inputData[base + 3];
+    v.b = inputData[base + 4];
+    return v;
+}
+
+void main() {
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= uNumIndices) return;
+
+    uint idx = indices[id];
+    
+    InputVertex v = fetchVertex(idx);
+    vec2 p = mapToScreen(v.lon, v.lat);
+    vec4 color = vec4(v.r, v.g, v.b, 1.0);
+
+    vec2 normal = vec2(0.0, 1.0);
+    vec2 p_prev = p;
+    vec2 p_next = p;
+    
+    if (id > 0) {
+        InputVertex v_prev = fetchVertex(indices[id - 1]);
+        p_prev = mapToScreen(v_prev.lon, v_prev.lat);
+    }
+    if (id < uNumIndices - 1) {
+        InputVertex v_next = fetchVertex(indices[id + 1]);
+        p_next = mapToScreen(v_next.lon, v_next.lat);
+    }
+
+    vec2 dir = vec2(0.0);
+    if (p_next != p) dir += normalize(p_next - p);
+    if (p_prev != p) dir += normalize(p - p_prev);
+    if (length(dir) > 0.0) {
+        dir = normalize(dir);
+        normal = vec2(-dir.y, dir.x);
+    }
+
+    float halfWidth = uWidth * 0.5;
+    outputVertices[id * 2].pos = p + normal * halfWidth;
+    outputVertices[id * 2]._pad = vec2(0.0);
+    outputVertices[id * 2].color = color;
+    outputVertices[id * 2 + 1].pos = p - normal * halfWidth;
+    outputVertices[id * 2 + 1]._pad = vec2(0.0);
+    outputVertices[id * 2 + 1].color = color;
+}
+)";
+
+static const char *VertexShaderSource = R"(
+#version 430 core
+layout(location = 0) in vec2 aPos;
+layout(location = 1) in vec4 aColor;
+out vec4 vColor;
+uniform vec2 uScreenSize;
+void main() {
+    vec2 ndc = (aPos / uScreenSize) * 2.0 - 1.0;
+    gl_Position = vec4(ndc, 0.0, 1.0);
+    vColor = aColor;
+}
+)";
+
+static const char *FragmentShaderSource = R"(
+#version 430 core
+in vec4 vColor;
+out vec4 FragColor;
+void main() {
+    FragColor = vColor;
+}
+)";
 
 // GL debug callback function used when KHR_debug is available. Logs
 // messages (skips notifications) through wxLogError and stderr for
@@ -215,14 +328,18 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
     // This is required for the geometry shader to calculate normals for the end segments.
     GLuint countHere = 0;
 
+    // Start: duplicate first vertex
+    indices.push_back(base);
+    countHere += 1;
+
     // Add all vertices of the current line strip
     for (size_t i = 0; i < (vertices.size() / 5) - base; ++i) {
         indices.push_back(base + static_cast<GLuint>(i));
         ++countHere;
     }
 
-    // End: use a nullptr
-    indices.push_back(0);
+    // End: duplicate last vertex
+    indices.push_back(base + static_cast<GLuint>((vertices.size() / 5) - 1 - base));
     countHere += 1;
 
     // Record draw command (count, byte offset)
@@ -230,6 +347,12 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
     drawCommands_.emplace_back(static_cast<GLsizei>(countHere), startByteOffset);
     indexOffset += countHere;
 }
+
+struct OutputVertex {
+    float x, y;
+    float pad[2];
+    float r, g, b, a;
+};
 
 void OpenGLCanvas::UpdateBuffersFromRoutes() {
     if (!isOpenGLInitialized_) {
@@ -259,7 +382,7 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     Color_t AREA_COLOR = {0.2f, 0.89f, 0.1f};
 
     // Start with bogus vertex so we can have a null index
-    vertices.resize(5, 0.0f);
+    // vertices.resize(5, 0.0f);
 
     size_t indexOffset = 0;
 
@@ -302,6 +425,23 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     // Unbind
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
+
+    // Setup output buffer for compute shader
+    if (output_vbo_ == 0)
+        glGenBuffers(1, &output_vbo_);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_vbo_);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, elementCount_ * 2 * sizeof(OutputVertex), nullptr, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+    if (output_vao_ == 0)
+        glGenVertexArrays(1, &output_vao_);
+    glBindVertexArray(output_vao_);
+    glBindBuffer(GL_ARRAY_BUFFER, output_vbo_);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(OutputVertex), (void *)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(OutputVertex), (void *)16);
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
 }
 
 void OpenGLCanvas::CompileShaderProgram() {
@@ -319,14 +459,14 @@ void OpenGLCanvas::CompileShaderProgram() {
         return s;
     };
 
-    GLuint cs = compile(GL_COMPUTE_SHADER, ComputeShader);
+    GLuint cs = compile(GL_COMPUTE_SHADER, ComputeShaderSource);
     map_compute_program_ = glCreateProgram();
     glAttachShader(map_compute_program_, cs);
     glLinkProgram(map_compute_program_);
     glDeleteShader(cs);
 
-    GLuint vs = compile(GL_VERTEX_SHADER, VertexShader);
-    GLuint fs = compile(GL_FRAGMENT_SHADER, FragmentShader);
+    GLuint vs = compile(GL_VERTEX_SHADER, VertexShaderSource);
+    GLuint fs = compile(GL_FRAGMENT_SHADER, FragmentShaderSource);
     display_program_ = glCreateProgram();
     glAttachShader(display_program_, vs);
     glAttachShader(display_program_, fs);
@@ -342,6 +482,8 @@ OpenGLCanvas::~OpenGLCanvas() {
     glDeleteTextures(1, &render_texture_);
     glDeleteVertexArrays(1, &quad_vao_);
     glDeleteBuffers(1, &quad_vbo_);
+    glDeleteBuffers(1, &output_vbo_);
+    glDeleteVertexArrays(1, &output_vao_);
     glDeleteProgram(map_compute_program_);
     glDeleteProgram(display_program_);
 
@@ -463,36 +605,27 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     if (latRange == 0.0)
         latRange = 1.0;
 
-    // 1. Clear texture
-    GLuint fbo;
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, render_texture_, 0);
-    glClearColor(clearColor, clearColor, clearColor, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glDeleteFramebuffers(1, &fbo);
-
-    // 2. Dispatch compute
+    // 1. Dispatch compute to extrude lines
     glUseProgram(map_compute_program_);
     glUniform4f(glGetUniformLocation(map_compute_program_, "uBounds"), static_cast<float>(minLon),
                 static_cast<float>(minLat), static_cast<float>(lonRange), static_cast<float>(latRange));
-    glUniform2i(glGetUniformLocation(map_compute_program_, "uScreenSize"), size.x, size.y);
+    glUniform2f(glGetUniformLocation(map_compute_program_, "uScreenSize"), static_cast<float>(size.x),
+                static_cast<float>(size.y));
     glUniform1ui(glGetUniformLocation(map_compute_program_, "uNumIndices"), static_cast<GLuint>(elementCount_));
+    glUniform1f(glGetUniformLocation(map_compute_program_, "uWidth"), 5.0f); // Line width
 
-    glBindImageTexture(0, render_texture_, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, VBO_);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, EBO_);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, output_vbo_);
 
     glDispatchCompute((elementCount_ + 127) / 128, 1, 1);
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+    glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 
-    // 3. Draw quad
+    // 2. Draw extruded triangle strip
     glUseProgram(display_program_);
-    glBindVertexArray(quad_vao_);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, render_texture_);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glUniform2f(glGetUniformLocation(display_program_, "uScreenSize"), (float)size.x, (float)size.y);
+    glBindVertexArray(output_vao_);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, elementCount_ * 2);
     glBindVertexArray(0);
 
     SwapBuffers();
@@ -550,15 +683,6 @@ void OpenGLCanvas::OnSize(wxSizeEvent &event) {
 
         // Save the viewportSize for later
         viewportSize_ = viewPortSize;
-
-        // Recreate texture
-        if (render_texture_)
-            glDeleteTextures(1, &render_texture_);
-        glGenTextures(1, &render_texture_);
-        glBindTexture(GL_TEXTURE_2D, render_texture_);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, viewPortSize.x, viewPortSize.y, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     }
 
     event.Skip();
