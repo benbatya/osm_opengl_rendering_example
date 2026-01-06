@@ -39,8 +39,6 @@ class OpenGLCanvas : public wxGLCanvas {
   protected:
     void CompileShaderProgram();
 
-    // std::string GetShaderBuildLog() const { return shaderProgram_.lastBuildLog_.str(); }
-
     bool InitializeOpenGLFunctions();
 
     // Update GPU buffers from `storedRoutes_` (called after GL init or when

@@ -171,8 +171,8 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     // }
 
     // Take all ways
-    storedRoutes_ = ways;
-    storedAreas_ = areas;
+    // storedRoutes_ = ways;
+    // storedAreas_ = areas;
 
     // add the boundary
     OSMLoader::Route_t boundsWay{};
@@ -196,9 +196,11 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
     }
 
     // Store the starting index for this line strip in the vertices array
-    GLuint base = static_cast<GLuint>(indexOffset);
+    GLuint base = static_cast<GLuint>(vertices.size() / 5);
 
     vertices.reserve(vertices.size() + coords.size() * 5);
+
+    auto nC = color;
 
     // Add vertices for the current line strip
     for (const auto &loc : coords) {
@@ -208,35 +210,38 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
         // Store raw lon/lat in vertex attributes; shader will normalize
         vertices.push_back(static_cast<float>(lon));
         vertices.push_back(static_cast<float>(lat));
-        vertices.push_back(color[0]);
-        vertices.push_back(color[1]);
-        vertices.push_back(color[2]);
+        vertices.push_back(nC[0]);
+        vertices.push_back(nC[1]);
+        vertices.push_back(nC[2]);
+        nC[0] *= 0.5f;
+        nC[1] *= 0.5f;
+        nC[2] *= 0.5f;
     }
 
     // Indices for GL_LINE_STRIP_ADJACENCY: duplicate first and last
     // This is required for the geometry shader to calculate normals for the end segments.
-    GLuint countHere = 0;
+    GLuint numIndices = 0;
 
     // // Start: duplicate first vertex
     // indices.push_back(base);
-    // countHere += 1;
+    // numIndices += 1;
 
     // Add all vertices of the current line strip
     for (size_t ii = base; ii < vertices.size() / 5; ++ii) {
         indices.push_back(static_cast<GLuint>(ii));
-        ++countHere;
+        ++numIndices;
     }
 
     // End: duplicate last vertex
-    // indices.push_back(base + static_cast<GLuint>((vertices.size() / 5) - 1 - base));
+    // indices.push_back(static_cast<GLuint>((vertices.size() / 5) - 1));
     // End: truncate the last index in the route
     indices.push_back(0);
-    countHere += 1;
+    ++numIndices;
 
     // Record draw command (count, byte offset)
     size_t startByteOffset = indexOffset * sizeof(GLuint);
-    drawCommands_.emplace_back(static_cast<GLsizei>(countHere), startByteOffset);
-    indexOffset += countHere;
+    drawCommands_.emplace_back(static_cast<GLsizei>(numIndices - 1), startByteOffset);
+    indexOffset += numIndices;
 }
 
 struct OutputVertex {

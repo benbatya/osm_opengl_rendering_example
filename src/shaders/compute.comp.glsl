@@ -54,7 +54,7 @@ void main() {
     if (id >= uNumIndices) return;
 
     uint idx = indices[id];
-    if (idx == 0) return;
+    if (idx == 0) { idx = indices[id - 1]; }
 
     uint idxPrev = 0;
     uint idxNext = 0;
@@ -82,19 +82,9 @@ void main() {
         }
     }
 
-    // if(idx == idxPrev) {
-    //     idxNext = idx;
-    //     p_next = p;
-    // }
-
-    // if(idx == idxNext) {
-    //     idxPrev = idx;
-    //     p_prev = p;
-    // }
-
     vec2 dir = vec2(0.0);
-    if (idxNext != 0) dir += normalize(p_next - p);
     if (idxPrev != 0) dir += normalize(p - p_prev);
+    if (idxNext != 0) dir += normalize(p_next - p);
     if (length(dir) > 0.0) {
         dir = normalize(dir);
         normal = vec2(-dir.y, dir.x);
