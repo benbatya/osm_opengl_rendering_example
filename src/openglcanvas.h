@@ -79,7 +79,6 @@ class OpenGLCanvas : public wxGLCanvas {
     GLuint EBO_{0};           // element buffer object
     GLsizei elementCount_{0}; // number of indices in the EBO
 
-    GLuint render_texture_{0};
     GLuint quad_vao_{0};
     GLuint quad_vbo_{0};
     GLuint output_vbo_{0};

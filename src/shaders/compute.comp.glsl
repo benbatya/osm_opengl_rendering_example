@@ -1,50 +1,108 @@
 #version 430 core
 layout(local_size_x = 128) in;
-layout(rgba8, binding = 0) uniform image2D imgOutput;
 
-struct Vertex {
-    float x, y;
-    float r, g, b;
+struct InputVertex {
+    float lon;
+    float lat;
+    float r;
+    float g;
+    float b;
 };
 
-layout(std430, binding = 1) buffer VertexBuffer {
-    Vertex vertices[];
+struct OutputVertex {
+    vec2 pos;
+    vec2 _pad;
+    vec4 color;
 };
 
-layout(std430, binding = 2) buffer IndexBuffer {
+layout(std430, binding = 1) readonly buffer InputVBO {
+    float inputData[];
+};
+
+layout(std430, binding = 2) readonly buffer InputEBO {
     uint indices[];
 };
 
-uniform vec4 uBounds; // minLon, minLat, lonRange, latRange
-uniform ivec2 uScreenSize;
-uniform uint uNumIndices;
+layout(std430, binding = 3) writeonly buffer OutputVBO {
+    OutputVertex outputVertices[];
+};
 
+uniform vec4 uBounds;
+uniform vec2 uScreenSize;
+uniform uint uNumIndices;
+uniform float uWidth;
+
+vec2 mapToScreen(float lon, float lat) {
+    float x = (lon - uBounds.x) / uBounds.z;
+    float y = (lat - uBounds.y) / uBounds.w;
+    return vec2(x * uScreenSize.x, y * uScreenSize.y);
+}
+
+InputVertex fetchVertex(uint index) {
+    uint base = index * 5;
+    InputVertex v;
+    v.lon = inputData[base];
+    v.lat = inputData[base + 1];
+    v.r = inputData[base + 2];
+    v.g = inputData[base + 3];
+    v.b = inputData[base + 4];
+    return v;
+}
 
 void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    if (idx >= uNumIndices - 1) return;
+    uint id = gl_GlobalInvocationID.x;
+    if (id >= uNumIndices) return;
 
-    uint i1 = indices[idx];
-    uint i2 = indices[idx+1];
-    if (i1 == 0 || i2 == 0) return;
-
-    Vertex iv1 = vertices[i1];
-    Vertex iv2 = vertices[i2];
-    vec2 v1 = vec2(iv1.x, iv1.y);
-    vec2 v2 = vec2(iv2.x, iv2.y);
+    uint idx = indices[id];
+    uint idxPrev = idx;
+    uint idxNext = idx;
     
-    vec2 boundsMin = uBounds.xy;
-    vec2 boundsRange = uBounds.zw;
+    InputVertex v = fetchVertex(idx);
+    vec2 p = mapToScreen(v.lon, v.lat);
+    vec4 color = vec4(v.r, v.g, v.b, 1.0);
 
-    vec2 p1 = (v1 - boundsMin) / boundsRange * vec2(uScreenSize);
-    vec2 p2 = (v2 - boundsMin) / boundsRange * vec2(uScreenSize);
-
-    vec2 dir = p2 - p1;
-    float len = length(dir);
-    if (len < 0.1) return;
+    vec2 normal = vec2(0.0, 1.0);
+    vec2 p_prev = p;
+    vec2 p_next = p;
     
-    vec3 color = vec3(iv1.r, iv1.g, iv1.b);
-    for (float i = 0; i <= len; i += 0.5) {
-        imageStore(imgOutput, ivec2(p1 + (dir/len) * i), vec4(color, 1.0));
+    if (id > 0) {
+        idxPrev = indices[id - 1];
+        if (idxPrev != idx) {
+            InputVertex v_prev = fetchVertex(idxPrev);
+            p_prev = mapToScreen(v_prev.lon, v_prev.lat);
+        }
     }
+    if (id < uNumIndices - 1) {
+        idxNext = indices[id + 1];
+        if (idxNext != idx) {
+            InputVertex v_next = fetchVertex(idxNext);
+            p_next = mapToScreen(v_next.lon, v_next.lat);
+        }
+    }
+
+    if(idx == idxPrev) {
+        idxNext = idx;
+        p_next = p;
+    }
+
+    if(idx == idxNext) {
+        idxPrev = idx;
+        p_prev = p;
+    }
+
+    vec2 dir = vec2(0.0);
+    if (idxNext != idx) dir += normalize(p_next - p);
+    if (idxPrev != idx) dir += normalize(p - p_prev);
+    if (length(dir) > 0.0) {
+        dir = normalize(dir);
+        normal = vec2(-dir.y, dir.x);
+    }
+
+    float halfWidth = uWidth * 0.5;
+    outputVertices[id * 2].pos = p + normal * halfWidth;
+    outputVertices[id * 2]._pad = vec2(0.0);
+    outputVertices[id * 2].color = color;
+    outputVertices[id * 2 + 1].pos = p - normal * halfWidth;
+    outputVertices[id * 2 + 1]._pad = vec2(0.0);
+    outputVertices[id * 2 + 1].color = color;
 }

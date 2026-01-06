@@ -1,5 +1,7 @@
 #include "openglcanvas.h"
 
+#include <shaders.h>
+
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -10,121 +12,6 @@
 #include <vector>
 
 wxDEFINE_EVENT(wxEVT_OPENGL_INITIALIZED, wxCommandEvent);
-
-static const char *ComputeShaderSource = R"(
-#version 430 core
-layout(local_size_x = 128) in;
-
-struct InputVertex {
-    float lon;
-    float lat;
-    float r;
-    float g;
-    float b;
-};
-
-struct OutputVertex {
-    vec2 pos;
-    vec2 _pad;
-    vec4 color;
-};
-
-layout(std430, binding = 1) readonly buffer InputVBO {
-    float inputData[];
-};
-
-layout(std430, binding = 2) readonly buffer InputEBO {
-    uint indices[];
-};
-
-layout(std430, binding = 3) writeonly buffer OutputVBO {
-    OutputVertex outputVertices[];
-};
-
-uniform vec4 uBounds;
-uniform vec2 uScreenSize;
-uniform uint uNumIndices;
-uniform float uWidth;
-
-vec2 mapToScreen(float lon, float lat) {
-    float x = (lon - uBounds.x) / uBounds.z;
-    float y = (lat - uBounds.y) / uBounds.w;
-    return vec2(x * uScreenSize.x, y * uScreenSize.y);
-}
-
-InputVertex fetchVertex(uint index) {
-    uint base = index * 5;
-    InputVertex v;
-    v.lon = inputData[base];
-    v.lat = inputData[base + 1];
-    v.r = inputData[base + 2];
-    v.g = inputData[base + 3];
-    v.b = inputData[base + 4];
-    return v;
-}
-
-void main() {
-    uint id = gl_GlobalInvocationID.x;
-    if (id >= uNumIndices) return;
-
-    uint idx = indices[id];
-    
-    InputVertex v = fetchVertex(idx);
-    vec2 p = mapToScreen(v.lon, v.lat);
-    vec4 color = vec4(v.r, v.g, v.b, 1.0);
-
-    vec2 normal = vec2(0.0, 1.0);
-    vec2 p_prev = p;
-    vec2 p_next = p;
-    
-    if (id > 0) {
-        InputVertex v_prev = fetchVertex(indices[id - 1]);
-        p_prev = mapToScreen(v_prev.lon, v_prev.lat);
-    }
-    if (id < uNumIndices - 1) {
-        InputVertex v_next = fetchVertex(indices[id + 1]);
-        p_next = mapToScreen(v_next.lon, v_next.lat);
-    }
-
-    vec2 dir = vec2(0.0);
-    if (p_next != p) dir += normalize(p_next - p);
-    if (p_prev != p) dir += normalize(p - p_prev);
-    if (length(dir) > 0.0) {
-        dir = normalize(dir);
-        normal = vec2(-dir.y, dir.x);
-    }
-
-    float halfWidth = uWidth * 0.5;
-    outputVertices[id * 2].pos = p + normal * halfWidth;
-    outputVertices[id * 2]._pad = vec2(0.0);
-    outputVertices[id * 2].color = color;
-    outputVertices[id * 2 + 1].pos = p - normal * halfWidth;
-    outputVertices[id * 2 + 1]._pad = vec2(0.0);
-    outputVertices[id * 2 + 1].color = color;
-}
-)";
-
-static const char *VertexShaderSource = R"(
-#version 430 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec4 aColor;
-out vec4 vColor;
-uniform vec2 uScreenSize;
-void main() {
-    vec2 ndc = (aPos / uScreenSize) * 2.0 - 1.0;
-    gl_Position = vec4(ndc, 0.0, 1.0);
-    vColor = aColor;
-}
-)";
-
-static const char *FragmentShaderSource = R"(
-#version 430 core
-in vec4 vColor;
-out vec4 FragColor;
-void main() {
-    FragColor = vColor;
-}
-)";
 
 // GL debug callback function used when KHR_debug is available. Logs
 // messages (skips notifications) through wxLogError and stderr for
@@ -459,14 +346,14 @@ void OpenGLCanvas::CompileShaderProgram() {
         return s;
     };
 
-    GLuint cs = compile(GL_COMPUTE_SHADER, ComputeShaderSource);
+    GLuint cs = compile(GL_COMPUTE_SHADER, ComputeShader);
     map_compute_program_ = glCreateProgram();
     glAttachShader(map_compute_program_, cs);
     glLinkProgram(map_compute_program_);
     glDeleteShader(cs);
 
-    GLuint vs = compile(GL_VERTEX_SHADER, VertexShaderSource);
-    GLuint fs = compile(GL_FRAGMENT_SHADER, FragmentShaderSource);
+    GLuint vs = compile(GL_VERTEX_SHADER, VertexShader);
+    GLuint fs = compile(GL_FRAGMENT_SHADER, FragmentShader);
     display_program_ = glCreateProgram();
     glAttachShader(display_program_, vs);
     glAttachShader(display_program_, fs);
@@ -479,7 +366,6 @@ OpenGLCanvas::~OpenGLCanvas() {
     glDeleteVertexArrays(1, &VAO_);
     glDeleteBuffers(1, &VBO_);
     glDeleteBuffers(1, &EBO_);
-    glDeleteTextures(1, &render_texture_);
     glDeleteVertexArrays(1, &quad_vao_);
     glDeleteBuffers(1, &quad_vbo_);
     glDeleteBuffers(1, &output_vbo_);
