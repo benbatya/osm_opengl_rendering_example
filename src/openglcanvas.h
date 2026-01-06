@@ -73,14 +73,15 @@ class OpenGLCanvas : public wxGLCanvas {
     float fps_{0.0f};
 
     GLuint VAO_{0};
-    GLuint VBO_{0};           // vertex buffer object
-    GLuint EBO_{0};           // element buffer object
-    GLsizei elementCount_{0}; // number of indices in the EBO
+    GLuint VBO_{0};              // vertex buffer object
+    GLuint EBO_{0};              // element buffer object
+    GLsizei inputIndexCount_{0}; // number of indices in the EBO
 
     GLuint quad_vao_{0};
     GLuint quad_vbo_{0};
     GLuint output_vbo_{0};
     GLuint output_vao_{0};
+    GLsizei outputVertexCount_{0}; // number of output vertices in the outputVAO
 
     // OSM Coordinate bounds
     osmium::Box coordinateBounds_{};

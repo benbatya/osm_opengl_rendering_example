@@ -32,6 +32,8 @@ uniform vec2 uScreenSize;
 uniform uint uNumIndices;
 uniform float uWidth;
 
+const uint INVALID_IDX = uint(-1);
+
 vec2 mapToScreen(float lon, float lat) {
     float x = (lon - uBounds.x) / uBounds.z;
     float y = (lat - uBounds.y) / uBounds.w;
@@ -54,10 +56,10 @@ void main() {
     if (id >= uNumIndices) return;
 
     uint idx = indices[id];
-    if (idx == 0) { idx = indices[id - 1]; }
+    if (idx == INVALID_IDX) return;
 
-    uint idxPrev = 0;
-    uint idxNext = 0;
+    uint idxPrev = INVALID_IDX;
+    uint idxNext = INVALID_IDX;
     
     InputVertex v = fetchVertex(idx);
     vec2 p = mapToScreen(v.lon, v.lat);
@@ -69,22 +71,22 @@ void main() {
     
     if (id > 0) {
         idxPrev = indices[id - 1];
-        if (idxPrev != 0) {
+        if (idxPrev != INVALID_IDX) {
             InputVertex v_prev = fetchVertex(idxPrev);
             p_prev = mapToScreen(v_prev.lon, v_prev.lat);
         }
     }
     if (id < uNumIndices - 1) {
         idxNext = indices[id + 1];
-        if (idxNext != 0) {
+        if (idxNext != INVALID_IDX) {
             InputVertex v_next = fetchVertex(idxNext);
             p_next = mapToScreen(v_next.lon, v_next.lat);
         }
     }
 
     vec2 dir = vec2(0.0);
-    if (idxPrev != 0) dir += normalize(p - p_prev);
-    if (idxNext != 0) dir += normalize(p_next - p);
+    if (idxPrev != INVALID_IDX) dir += normalize(p - p_prev);
+    if (idxNext != INVALID_IDX) dir += normalize(p_next - p);
     if (length(dir) > 0.0) {
         dir = normalize(dir);
         normal = vec2(-dir.y, dir.x);
