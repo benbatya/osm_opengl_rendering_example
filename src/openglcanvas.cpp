@@ -13,76 +13,6 @@
 
 wxDEFINE_EVENT(wxEVT_OPENGL_INITIALIZED, wxCommandEvent);
 
-static const char *map_compute_source = R"(
-#version 430 core
-layout(local_size_x = 128) in;
-layout(rgba8, binding = 0) uniform image2D imgOutput;
-
-struct Vertex {
-    float x, y;
-    float r, g, b;
-};
-
-layout(std430, binding = 1) buffer VertexBuffer {
-    Vertex vertices[];
-};
-
-layout(std430, binding = 2) buffer IndexBuffer {
-    uint indices[];
-};
-
-uniform vec4 uBounds; // minLon, minLat, lonRange, latRange
-uniform ivec2 uScreenSize;
-uniform uint uNumIndices;
-
-void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    if (idx >= uNumIndices - 1) return;
-
-    uint i1 = indices[idx];
-    uint i2 = indices[idx+1];
-    if (i1 == i2) return;
-
-    Vertex v1 = vertices[i1];
-    Vertex v2 = vertices[i2];
-    
-    vec2 p1 = vec2((v1.x - uBounds.x) / uBounds.z * uScreenSize.x,
-                   (v1.y - uBounds.y) / uBounds.w * uScreenSize.y);
-    vec2 p2 = vec2((v2.x - uBounds.x) / uBounds.z * uScreenSize.x,
-                   (v2.y - uBounds.y) / uBounds.w * uScreenSize.y);
-
-    vec2 dir = p2 - p1;
-    float len = length(dir);
-    if (len < 0.1) return;
-    
-    vec3 color = vec3(v1.r, v1.g, v1.b);
-    for (float i = 0; i <= len; i += 0.5) {
-        imageStore(imgOutput, ivec2(p1 + (dir/len) * i), vec4(color, 1.0));
-    }
-}
-)";
-
-static const char *display_v_source = R"(
-#version 430 core
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aTexCoord;
-out vec2 TexCoord;
-void main() {
-    gl_Position = vec4(aPos, 0.0, 1.0);
-    TexCoord = aTexCoord;
-}
-)";
-
-static const char *display_f_source = R"(
-#version 430 core
-in vec2 TexCoord;
-out vec4 FragColor;
-uniform sampler2D screenTexture;
-void main() {
-    FragColor = texture(screenTexture, TexCoord);
-}
-)";
-
 // GL debug callback function used when KHR_debug is available. Logs
 // messages (skips notifications) through wxLogError and stderr for
 // high-severity messages.
@@ -285,18 +215,14 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
     // This is required for the geometry shader to calculate normals for the end segments.
     GLuint countHere = 0;
 
-    // Start: duplicate first vertex
-    indices.push_back(base);
-    countHere += 1;
-
     // Add all vertices of the current line strip
     for (size_t i = 0; i < (vertices.size() / 5) - base; ++i) {
         indices.push_back(base + static_cast<GLuint>(i));
         ++countHere;
     }
 
-    // End: duplicate last vertex
-    indices.push_back(base + static_cast<GLuint>((vertices.size() / 5) - 1 - base));
+    // End: use a nullptr
+    indices.push_back(0);
     countHere += 1;
 
     // Record draw command (count, byte offset)
@@ -331,6 +257,9 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
                                     {"platform", {0.6f, 0.6f, 0.8f}}};
     Color_t DEFAULT_COLOR = {0.5f, 0.5f, 0.5f};
     Color_t AREA_COLOR = {0.2f, 0.89f, 0.1f};
+
+    // Start with bogus vertex so we can have a null index
+    vertices.resize(5, 0.0f);
 
     size_t indexOffset = 0;
 
@@ -390,14 +319,14 @@ void OpenGLCanvas::CompileShaderProgram() {
         return s;
     };
 
-    GLuint cs = compile(GL_COMPUTE_SHADER, map_compute_source);
+    GLuint cs = compile(GL_COMPUTE_SHADER, ComputeShader);
     map_compute_program_ = glCreateProgram();
     glAttachShader(map_compute_program_, cs);
     glLinkProgram(map_compute_program_);
     glDeleteShader(cs);
 
-    GLuint vs = compile(GL_VERTEX_SHADER, display_v_source);
-    GLuint fs = compile(GL_FRAGMENT_SHADER, display_f_source);
+    GLuint vs = compile(GL_VERTEX_SHADER, VertexShader);
+    GLuint fs = compile(GL_FRAGMENT_SHADER, FragmentShader);
     display_program_ = glCreateProgram();
     glAttachShader(display_program_, vs);
     glAttachShader(display_program_, fs);

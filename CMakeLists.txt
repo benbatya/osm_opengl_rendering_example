@@ -145,7 +145,7 @@ if(lto_supported)
     set_target_properties(main PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
-function(stringify_shaders VS_FILE GS_FILE FS_FILE)
+function(stringify_shaders CS_FILE VS_FILE FS_FILE)
 
   # Define the input file and the desired output file
   set(CONFIG_IN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/shaders/shaders.h.in")
@@ -154,7 +154,7 @@ function(stringify_shaders VS_FILE GS_FILE FS_FILE)
   # Add a custom command to generate the file
   add_custom_command(
       OUTPUT ${CONFIG_OUT_FILE}
-      COMMAND ${CMAKE_COMMAND} -DVS_FILE=${VS_FILE} -DGS_FILE=${GS_FILE} -DFS_FILE=${FS_FILE} -DIN_FILE=${CONFIG_IN_FILE} -DOUT_FILE=${CONFIG_OUT_FILE} -P ${CMAKE_CURRENT_SOURCE_DIR}/generate_shaders.cmake
+      COMMAND ${CMAKE_COMMAND} -DVS_FILE=${VS_FILE} -DCS_FILE=${CS_FILE} -DFS_FILE=${FS_FILE} -DIN_FILE=${CONFIG_IN_FILE} -DOUT_FILE=${CONFIG_OUT_FILE} -P ${CMAKE_CURRENT_SOURCE_DIR}/generate_shaders.cmake
       DEPENDS ${CONFIG_IN_FILE} ${VS_FILE} ${GS_FILE} ${FS_FILE}
       COMMENT "Generating shaders.h file..."
   )
@@ -172,7 +172,7 @@ function(stringify_shaders VS_FILE GS_FILE FS_FILE)
 endfunction()
 
 stringify_shaders(
-    "${CMAKE_SOURCE_DIR}/src/shaders/house_shader.vs"
-    "${CMAKE_SOURCE_DIR}/src/shaders/house_shader.gs"
-    "${CMAKE_SOURCE_DIR}/src/shaders/house_shader.fs"
+    "${CMAKE_SOURCE_DIR}/src/shaders/compute.comp.glsl"
+    "${CMAKE_SOURCE_DIR}/src/shaders/compute.vert.glsl"
+    "${CMAKE_SOURCE_DIR}/src/shaders/compute.frag.glsl"
 )
