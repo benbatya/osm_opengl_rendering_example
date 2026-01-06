@@ -80,8 +80,10 @@ class OpenGLCanvas : public wxGLCanvas {
     GLuint quad_vao_{0};
     GLuint quad_vbo_{0};
     GLuint output_vbo_{0};
+    GLuint output_ebo_{0};
     GLuint output_vao_{0};
     GLsizei outputVertexCount_{0}; // number of output vertices in the outputVAO
+    GLsizei outputIndexCount_{0};
 
     // OSM Coordinate bounds
     osmium::Box coordinateBounds_{};

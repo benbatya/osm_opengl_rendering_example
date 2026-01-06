@@ -27,6 +27,10 @@ layout(std430, binding = 3) writeonly buffer OutputVBO {
     OutputVertex outputVertices[];
 };
 
+layout(std430, binding = 4) writeonly buffer OutputEBO {
+    uint outputIndices[];
+};
+
 uniform vec4 uBounds;
 uniform vec2 uScreenSize;
 uniform uint uNumIndices;
@@ -56,6 +60,27 @@ void main() {
     if (id >= uNumIndices) return;
 
     uint idx = indices[id];
+
+    if (id < uNumIndices - 1) {
+        uint idxNext = indices[id + 1];
+        uint base = id * 6;
+        if (idx != INVALID_IDX && idxNext != INVALID_IDX) {
+            outputIndices[base + 0] = idx * 2;
+            outputIndices[base + 1] = idx * 2 + 1;
+            outputIndices[base + 2] = idxNext * 2;
+            outputIndices[base + 3] = idxNext * 2;
+            outputIndices[base + 4] = idx * 2 + 1;
+            outputIndices[base + 5] = idxNext * 2 + 1;
+        } else {
+            outputIndices[base + 0] = 0;
+            outputIndices[base + 1] = 0;
+            outputIndices[base + 2] = 0;
+            outputIndices[base + 3] = 0;
+            outputIndices[base + 4] = 0;
+            outputIndices[base + 5] = 0;
+        }
+    }
+
     if (idx == INVALID_IDX) return;
 
     uint idxPrev = INVALID_IDX;

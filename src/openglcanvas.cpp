@@ -132,32 +132,32 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     storedRoutes_.clear();
     storedAreas_.clear();
 
-    const size_t NUM_WAYS = std::min(ways.size(), static_cast<size_t>(1));
+    // const size_t NUM_WAYS = std::min(ways.size(), static_cast<size_t>(1));
 
-    std::unordered_map<size_t, std::vector<osmium::object_id_type>> lenIdMap;
+    // std::unordered_map<size_t, std::vector<osmium::object_id_type>> lenIdMap;
 
-    for (const auto &way : ways) {
-        auto length = way.second.nodes.size();
-        lenIdMap[length].push_back(way.first);
-    }
+    // for (const auto &way : ways) {
+    //     auto length = way.second.nodes.size();
+    //     lenIdMap[length].push_back(way.first);
+    // }
 
-    std::vector<size_t> sortedLengths;
-    for (const auto &pair : lenIdMap) {
-        sortedLengths.push_back(pair.first);
-    }
-    std::sort(sortedLengths.rbegin(), sortedLengths.rend());
+    // std::vector<size_t> sortedLengths;
+    // for (const auto &pair : lenIdMap) {
+    //     sortedLengths.push_back(pair.first);
+    // }
+    // std::sort(sortedLengths.rbegin(), sortedLengths.rend());
 
-    size_t count = 0;
-    for (size_t length : sortedLengths) {
-        for (auto wayId : lenIdMap[length]) {
-            if (count >= NUM_WAYS)
-                break;
-            storedRoutes_[wayId] = ways.at(wayId);
-            std::cout << "Selected way ID " << wayId << ", '" << storedRoutes_.at(wayId).tags.at(NAME_TAG)
-                      << "' with length " << length << std::endl;
-            ++count;
-        }
-    }
+    // size_t count = 0;
+    // for (size_t length : sortedLengths) {
+    //     for (auto wayId : lenIdMap[length]) {
+    //         if (count >= NUM_WAYS)
+    //             break;
+    //         storedRoutes_[wayId] = ways.at(wayId);
+    //         std::cout << "Selected way ID " << wayId << ", '" << storedRoutes_.at(wayId).tags.at(NAME_TAG)
+    //                   << "' with length " << length << std::endl;
+    //         ++count;
+    //     }
+    // }
 
     // // take first N ways
     // size_t count = 0;
@@ -170,7 +170,7 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     // }
 
     // Take all ways
-    // storedRoutes_ = ways;
+    storedRoutes_ = ways;
     // storedAreas_ = areas;
 
     // add the boundary
@@ -288,6 +288,7 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
 
     inputIndexCount_ = static_cast<GLsizei>(indices.size());
     outputVertexCount_ = static_cast<GLsizei>(vertices.size() / 5 * 2);
+    outputIndexCount_ = outputVertexCount_ + static_cast<GLsizei>(storedRoutes_.size());
 
     // Create VAO/VBO/EBO if necessary and upload
     if (VAO_ == 0)
@@ -323,6 +324,12 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     glBufferData(GL_SHADER_STORAGE_BUFFER, outputVertexCount_ * sizeof(OutputVertex), nullptr, GL_DYNAMIC_DRAW);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
+    if (output_ebo_ == 0)
+        glGenBuffers(1, &output_ebo_);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_ebo_);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, outputIndexCount_ * sizeof(GLuint), nullptr, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
     if (output_vao_ == 0)
         glGenVertexArrays(1, &output_vao_);
     glBindVertexArray(output_vao_);
@@ -331,7 +338,9 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(OutputVertex), (void *)16);
     glEnableVertexAttribArray(1);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, output_ebo_);
     glBindVertexArray(0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
 void OpenGLCanvas::CompileShaderProgram() {
@@ -372,6 +381,7 @@ OpenGLCanvas::~OpenGLCanvas() {
     glDeleteVertexArrays(1, &quad_vao_);
     glDeleteBuffers(1, &quad_vbo_);
     glDeleteBuffers(1, &output_vbo_);
+    glDeleteBuffers(1, &output_ebo_);
     glDeleteVertexArrays(1, &output_vao_);
     glDeleteProgram(map_compute_program_);
     glDeleteProgram(display_program_);
@@ -507,15 +517,19 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, VBO_);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, EBO_);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, output_vbo_);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 4, output_ebo_);
 
     glDispatchCompute((inputIndexCount_ + 127) / 128, 1, 1);
-    glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+    glMemoryBarrier(GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT | GL_ELEMENT_ARRAY_BARRIER_BIT);
 
     // 2. Draw extruded triangle strip
     glUseProgram(display_program_);
     glUniform2f(glGetUniformLocation(display_program_, "uScreenSize"), (float)size.x, (float)size.y);
     glBindVertexArray(output_vao_);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, outputVertexCount_);
+    glEnable(GL_PRIMITIVE_RESTART);
+    glPrimitiveRestartIndex(0xFFFFFFFF);
+    glDrawElements(GL_TRIANGLE_STRIP, outputIndexCount_, GL_UNSIGNED_INT, 0);
+    glDisable(GL_PRIMITIVE_RESTART);
     glBindVertexArray(0);
 
     SwapBuffers();
@@ -524,18 +538,30 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     if (!shown) {
         shown = true;
         // Debug: print out the contents of output_vbo_
-        OutputVertex *outputVertices = new OutputVertex[outputVertexCount_];
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_vbo_);
-        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, outputVertexCount_ * sizeof(OutputVertex), outputVertices);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        // OutputVertex *outputVertices = new OutputVertex[outputVertexCount_];
+        // glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_vbo_);
+        // glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, outputVertexCount_ * sizeof(OutputVertex), outputVertices);
+        // glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-        std::cout << "Output VBO Contents: count=" << outputVertexCount_ << std::endl;
-        for (size_t i = 0; i < outputVertexCount_; ++i) {
-            std::cout << "  Vertex " << i << ": x=" << outputVertices[i].x << ", y=" << outputVertices[i].y
-                      << ", r=" << outputVertices[i].r << ", g=" << outputVertices[i].g << ", b=" << outputVertices[i].b
-                      << ", a=" << outputVertices[i].a << std::endl;
-        }
-        delete[] outputVertices;
+        // std::cout << "Output VBO Contents: count=" << outputVertexCount_ << std::endl;
+        // for (size_t i = 0; i < outputVertexCount_; ++i) {
+        //     std::cout << "  Vertex " << i << ": x=" << outputVertices[i].x << ", y=" << outputVertices[i].y
+        //               << ", r=" << outputVertices[i].r << ", g=" << outputVertices[i].g << ", b=" <<
+        //               outputVertices[i].b
+        //               << ", a=" << outputVertices[i].a << std::endl;
+        // }
+        // delete[] outputVertices;
+
+        // GLuint *outputIndices = new GLuint[outputIndexCount_];
+        // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, output_ebo_);
+        // glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, outputIndexCount_ * sizeof(GLuint), outputIndices);
+        // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+        // std::cout << "Output EBO Contents: count=" << outputIndexCount_ << std::endl;
+        // for (size_t i = 0; i < outputIndexCount_; ++i) {
+        //     std::cout << "  Index " << i << ": " << outputIndices[i] << std::endl;
+        // }
+        // delete[] outputIndices;
     }
 
     // Update FPS counters and draw overlay text
