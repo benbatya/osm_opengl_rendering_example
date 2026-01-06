@@ -55,32 +55,13 @@ InputVertex fetchVertex(uint index) {
     return v;
 }
 
+// TODO: fix this to work on a segment at a time instead of a point
+
 void main() {
     uint id = gl_GlobalInvocationID.x;
     if (id >= uNumIndices) return;
 
     uint idx = indices[id];
-
-    if (id < uNumIndices - 1) {
-        uint idxNext = indices[id + 1];
-        uint base = id * 6;
-        if (idx != INVALID_IDX && idxNext != INVALID_IDX) {
-            outputIndices[base + 0] = idx * 2;
-            outputIndices[base + 1] = idx * 2 + 1;
-            outputIndices[base + 2] = idxNext * 2;
-            outputIndices[base + 3] = idxNext * 2;
-            outputIndices[base + 4] = idx * 2 + 1;
-            outputIndices[base + 5] = idxNext * 2 + 1;
-        } else {
-            outputIndices[base + 0] = 0;
-            outputIndices[base + 1] = 0;
-            outputIndices[base + 2] = 0;
-            outputIndices[base + 3] = 0;
-            outputIndices[base + 4] = 0;
-            outputIndices[base + 5] = 0;
-        }
-    }
-
     if (idx == INVALID_IDX) return;
 
     uint idxPrev = INVALID_IDX;
@@ -124,4 +105,24 @@ void main() {
     outputVertices[idx * 2 + 1].pos = p - normal * halfWidth;
     outputVertices[idx * 2 + 1]._pad = vec2(0.0);
     outputVertices[idx * 2 + 1].color = color;
+
+    if (id < uNumIndices - 1) {
+        uint idxNext = indices[id + 1];
+        uint base = id * 6;
+        if (idx != INVALID_IDX && idxNext != INVALID_IDX) {
+            outputIndices[base + 0] = idx * 2;
+            outputIndices[base + 1] = idx * 2 + 1;
+            outputIndices[base + 2] = idxNext * 2;
+            outputIndices[base + 3] = idxNext * 2;
+            outputIndices[base + 4] = idx * 2 + 1;
+            outputIndices[base + 5] = idxNext * 2 + 1;
+        } else {
+            outputIndices[base + 0] = 0;
+            outputIndices[base + 1] = 0;
+            outputIndices[base + 2] = 0;
+            outputIndices[base + 3] = 0;
+            outputIndices[base + 4] = 0;
+            outputIndices[base + 5] = 0;
+        }
+    }
 }
