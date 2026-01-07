@@ -55,17 +55,25 @@ InputVertex fetchVertex(uint index) {
     return v;
 }
 
-// TODO: fix this to work on a segment at a time instead of a point
+uint getIndex(uint id) {
+  if(id >= (uNumIndices - 1)) return INVALID_IDX;
+  return indices[id] >> 1;
+}
+bool isEnd(uint id) {
+  if(id >= (uNumIndices - 1)) return true;
+  return (indices[id] & 0x1) == 1;
+}
 
 void main() {
     uint id = gl_GlobalInvocationID.x;
     if (id >= uNumIndices) return;
 
-    uint idx = indices[id];
-    if (idx == INVALID_IDX) return;
+    uint idx = getIndex(id);
+    // determine if this is the end of a strip
+    const bool endPt = isEnd(id);
 
-    uint idxPrev = INVALID_IDX;
-    uint idxNext = INVALID_IDX;
+    uint idxPrev = getIndex(id-1);
+    uint idxNext = getIndex(id+1);
     
     InputVertex v = fetchVertex(idx);
     vec2 p = mapToScreen(v.lon, v.lat);
@@ -75,24 +83,19 @@ void main() {
     vec2 p_prev = p;
     vec2 p_next = p;
     
-    if (id > 0) {
-        idxPrev = indices[id - 1];
-        if (idxPrev != INVALID_IDX) {
-            InputVertex v_prev = fetchVertex(idxPrev);
-            p_prev = mapToScreen(v_prev.lon, v_prev.lat);
-        }
+    vec2 dir = vec2(0.0);
+
+    if (idxPrev != INVALID_IDX) {
+        InputVertex v_prev = fetchVertex(idxPrev);
+        p_prev = mapToScreen(v_prev.lon, v_prev.lat);
+        dir += normalize(p - p_prev);
     }
-    if (id < uNumIndices - 1) {
-        idxNext = indices[id + 1];
-        if (idxNext != INVALID_IDX) {
-            InputVertex v_next = fetchVertex(idxNext);
-            p_next = mapToScreen(v_next.lon, v_next.lat);
-        }
+    if (idxNext != INVALID_IDX) {
+        InputVertex v_next = fetchVertex(idxNext);
+        p_next = mapToScreen(v_next.lon, v_next.lat);
+        dir += normalize(p_next - p);
     }
 
-    vec2 dir = vec2(0.0);
-    if (idxPrev != INVALID_IDX) dir += normalize(p - p_prev);
-    if (idxNext != INVALID_IDX) dir += normalize(p_next - p);
     if (length(dir) > 0.0) {
         dir = normalize(dir);
         normal = vec2(-dir.y, dir.x);
@@ -106,23 +109,20 @@ void main() {
     outputVertices[idx * 2 + 1]._pad = vec2(0.0);
     outputVertices[idx * 2 + 1].color = color;
 
-    if (id < uNumIndices - 1) {
-        uint idxNext = indices[id + 1];
-        uint base = id * 6;
-        if (idx != INVALID_IDX && idxNext != INVALID_IDX) {
-            outputIndices[base + 0] = idx * 2;
-            outputIndices[base + 1] = idx * 2 + 1;
-            outputIndices[base + 2] = idxNext * 2;
-            outputIndices[base + 3] = idxNext * 2;
-            outputIndices[base + 4] = idx * 2 + 1;
-            outputIndices[base + 5] = idxNext * 2 + 1;
-        } else {
-            outputIndices[base + 0] = 0;
-            outputIndices[base + 1] = 0;
-            outputIndices[base + 2] = 0;
-            outputIndices[base + 3] = 0;
-            outputIndices[base + 4] = 0;
-            outputIndices[base + 5] = 0;
-        }
+    uint base = id * 6;
+    if (!endPt) { // && idx != INVALID_IDX && idxNext != INVALID_IDX) {
+        outputIndices[base + 0] = idx * 2;
+        outputIndices[base + 1] = idx * 2 + 1;
+        outputIndices[base + 2] = idxNext * 2;
+        outputIndices[base + 3] = idxNext * 2;
+        outputIndices[base + 4] = idx * 2 + 1;
+        outputIndices[base + 5] = idxNext * 2 + 1;
+    } else {
+        outputIndices[base + 0] = idx * 2;
+        outputIndices[base + 1] = idx * 2;
+        outputIndices[base + 2] = idx * 2;
+        outputIndices[base + 3] = idx * 2;
+        outputIndices[base + 4] = idx * 2;
+        outputIndices[base + 5] = idx * 2;
     }
 }

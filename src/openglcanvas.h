@@ -53,8 +53,7 @@ class OpenGLCanvas : public wxGLCanvas {
 
     using Color_t = std::array<GLfloat, 3>;
     void AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &coords, const Color_t &color,
-                                        std::vector<float> &vertices, std::vector<GLuint> &indices,
-                                        size_t &indexOffset);
+                                        std::vector<float> &vertices, std::vector<GLuint> &indices);
 
   private:
     wxGLContext *openGLContext_;
@@ -82,8 +81,8 @@ class OpenGLCanvas : public wxGLCanvas {
     GLuint output_vbo_{0};
     GLuint output_ebo_{0};
     GLuint output_vao_{0};
-    GLsizei outputVertexCount_{0}; // number of output vertices in the outputVAO
-    GLsizei outputIndexCount_{0};
+    GLsizei outputVertexCount_{0}; // number of output vertices in output_
+    GLsizei outputIndexCount_{0};  // number of indices in output_ebo_
 
     // OSM Coordinate bounds
     osmium::Box coordinateBounds_{};

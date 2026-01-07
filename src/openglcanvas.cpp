@@ -132,7 +132,7 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     storedRoutes_.clear();
     storedAreas_.clear();
 
-    // const size_t NUM_WAYS = std::min(ways.size(), static_cast<size_t>(1));
+    const size_t NUM_WAYS = std::min(ways.size(), static_cast<size_t>(1));
 
     // std::unordered_map<size_t, std::vector<osmium::object_id_type>> lenIdMap;
 
@@ -160,20 +160,20 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     // }
 
     // // take first N ways
-    // size_t count = 0;
-    // for (const auto &route : ways) {
-    //     if (count >= NUM_WAYS) {
-    //         break;
-    //     }
-    //     ++count;
-    //     storedRoutes_[route.first] = route.second;
-    // }
+    size_t count = 0;
+    for (const auto &route : ways) {
+        if (count >= NUM_WAYS) {
+            break;
+        }
+        ++count;
+        storedRoutes_[route.first] = route.second;
+    }
 
     // Take all ways
-    storedRoutes_ = ways;
+    // storedRoutes_ = ways;
     // storedAreas_ = areas;
 
-    // add the boundary
+    // add the boundary with fake id==42
     OSMLoader::Route_t boundsWay{};
     boundsWay.id = 42;
     boundsWay.tags[NAME_TAG] = "bounds";
@@ -187,17 +187,18 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     UpdateBuffersFromRoutes();
 }
 
+constexpr GLuint VERTEX_SIZE = 5;
+
 void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &coords, const Color_t &color,
-                                                  std::vector<float> &vertices, std::vector<GLuint> &indices,
-                                                  size_t &indexOffset) {
+                                                  std::vector<float> &vertices, std::vector<GLuint> &indices) {
     if (coords.size() < 2) {
         return;
     }
 
     // Store the starting index for this line strip in the vertices array
-    GLuint base = static_cast<GLuint>(vertices.size() / 5);
+    GLuint base = static_cast<GLuint>(vertices.size() / VERTEX_SIZE);
 
-    vertices.reserve(vertices.size() + coords.size() * 5);
+    vertices.reserve(vertices.size() + coords.size() * VERTEX_SIZE);
 
     auto nC = color;
 
@@ -217,28 +218,18 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
         nC[2] *= 0.5f;
     }
 
-    // Indices for GL_LINE_STRIP_ADJACENCY: duplicate first and last
-    // This is required for the geometry shader to calculate normals for the end segments.
-    GLuint numIndices = 0;
-
-    // // Start: duplicate first vertex
-    // indices.push_back(base);
-    // numIndices += 1;
-
     // Add all vertices of the current line strip
-    for (size_t ii = base; ii < vertices.size() / 5; ++ii) {
-        indices.push_back(static_cast<GLuint>(ii));
-        ++numIndices;
+    const GLuint endVertexIdx = static_cast<GLuint>(vertices.size() / VERTEX_SIZE);
+    for (GLuint ii = base; ii < endVertexIdx; ++ii) {
+        // Set bottom most bit if last
+        GLuint idx = ii << 1;
+        if (ii + 1 == endVertexIdx) {
+            // set top bit
+            idx = idx | 0x1;
+        }
+
+        indices.push_back(idx);
     }
-
-    // End: duplicate last vertex
-    // indices.push_back(static_cast<GLuint>((vertices.size() / 5) - 1));
-    // End: truncate the last index in the route
-    indices.push_back(static_cast<GLuint>(-1));
-    ++numIndices;
-
-    // Record draw command (count, byte offset)
-    indexOffset += numIndices;
 }
 
 struct OutputVertex {
@@ -273,22 +264,21 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
     Color_t DEFAULT_COLOR = {0.5f, 0.5f, 0.5f};
     Color_t AREA_COLOR = {0.2f, 0.89f, 0.1f};
 
-    size_t indexOffset = 0;
-
     for (const auto &entry : storedRoutes_) {
         const auto &coords = entry.second;
         if (coords.nodes.size() < 2)
             continue;
 
-        GLuint base = static_cast<GLuint>(vertices.size() / 5);
+        GLuint base = static_cast<GLuint>(vertices.size() / VERTEX_SIZE);
         const std::string &highwayType = entry.second.tags.count(HIGHWAY_TAG) ? entry.second.tags.at(HIGHWAY_TAG) : "";
         const auto &color = HIGHWAY2COLOR.count(highwayType) ? HIGHWAY2COLOR.at(highwayType) : DEFAULT_COLOR;
-        AddLineStripAdjacencyToBuffers(coords.nodes, color, vertices, indices, indexOffset);
+        AddLineStripAdjacencyToBuffers(coords.nodes, color, vertices, indices);
     }
 
     inputIndexCount_ = static_cast<GLsizei>(indices.size());
-    outputVertexCount_ = static_cast<GLsizei>(vertices.size() / 5 * 2);
-    outputIndexCount_ = outputVertexCount_ + static_cast<GLsizei>(storedRoutes_.size());
+    outputVertexCount_ = inputIndexCount_ * 2;
+    // 6 output indices per input
+    outputIndexCount_ = inputIndexCount_ * 6;
 
     // Create VAO/VBO/EBO if necessary and upload
     if (VAO_ == 0)
@@ -309,9 +299,10 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
 
     // vertex attributes
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void *>(0));
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, VERTEX_SIZE * sizeof(float), reinterpret_cast<void *>(0));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void *>(2 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, VERTEX_SIZE * sizeof(float),
+                          reinterpret_cast<void *>(2 * sizeof(float)));
 
     // Unbind
     glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -526,10 +517,10 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     glUseProgram(display_program_);
     glUniform2f(glGetUniformLocation(display_program_, "uScreenSize"), (float)size.x, (float)size.y);
     glBindVertexArray(output_vao_);
-    glEnable(GL_PRIMITIVE_RESTART);
-    glPrimitiveRestartIndex(0xFFFFFFFF);
+    // glEnable(GL_PRIMITIVE_RESTART);
+    // glPrimitiveRestartIndex(0xFFFFFFFF);
     glDrawElements(GL_TRIANGLE_STRIP, outputIndexCount_, GL_UNSIGNED_INT, 0);
-    glDisable(GL_PRIMITIVE_RESTART);
+    // glDisable(GL_PRIMITIVE_RESTART);
     glBindVertexArray(0);
 
     SwapBuffers();
@@ -538,30 +529,29 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     if (!shown) {
         shown = true;
         // Debug: print out the contents of output_vbo_
-        // OutputVertex *outputVertices = new OutputVertex[outputVertexCount_];
-        // glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_vbo_);
-        // glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, outputVertexCount_ * sizeof(OutputVertex), outputVertices);
-        // glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+        OutputVertex *outputVertices = new OutputVertex[outputVertexCount_];
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_vbo_);
+        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, outputVertexCount_ * sizeof(OutputVertex), outputVertices);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-        // std::cout << "Output VBO Contents: count=" << outputVertexCount_ << std::endl;
-        // for (size_t i = 0; i < outputVertexCount_; ++i) {
-        //     std::cout << "  Vertex " << i << ": x=" << outputVertices[i].x << ", y=" << outputVertices[i].y
-        //               << ", r=" << outputVertices[i].r << ", g=" << outputVertices[i].g << ", b=" <<
-        //               outputVertices[i].b
-        //               << ", a=" << outputVertices[i].a << std::endl;
-        // }
-        // delete[] outputVertices;
+        std::cout << "Output VBO Contents: count=" << outputVertexCount_ << std::endl;
+        for (size_t i = 0; i < outputVertexCount_; ++i) {
+            std::cout << "  Vertex " << i << ": x=" << outputVertices[i].x << ", y=" << outputVertices[i].y
+                      << ", r=" << outputVertices[i].r << ", g=" << outputVertices[i].g << ", b=" << outputVertices[i].b
+                      << ", a=" << outputVertices[i].a << std::endl;
+        }
+        delete[] outputVertices;
 
-        // GLuint *outputIndices = new GLuint[outputIndexCount_];
-        // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, output_ebo_);
-        // glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, outputIndexCount_ * sizeof(GLuint), outputIndices);
-        // glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        GLuint *outputIndices = new GLuint[outputIndexCount_];
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, output_ebo_);
+        glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, outputIndexCount_ * sizeof(GLuint), outputIndices);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-        // std::cout << "Output EBO Contents: count=" << outputIndexCount_ << std::endl;
-        // for (size_t i = 0; i < outputIndexCount_; ++i) {
-        //     std::cout << "  Index " << i << ": " << outputIndices[i] << std::endl;
-        // }
-        // delete[] outputIndices;
+        std::cout << "Output EBO Contents: count=" << outputIndexCount_ << std::endl;
+        for (size_t i = 0; i < outputIndexCount_; ++i) {
+            std::cout << "  Index " << i << ": " << outputIndices[i] << std::endl;
+        }
+        delete[] outputIndices;
     }
 
     // Update FPS counters and draw overlay text
