@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <iomanip>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -132,7 +133,7 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     storedRoutes_.clear();
     storedAreas_.clear();
 
-    const size_t NUM_WAYS = std::min(ways.size(), static_cast<size_t>(1));
+    // const size_t NUM_WAYS = std::min(ways.size(), static_cast<size_t>(1));
 
     // std::unordered_map<size_t, std::vector<osmium::object_id_type>> lenIdMap;
 
@@ -160,17 +161,17 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     // }
 
     // // take first N ways
-    size_t count = 0;
-    for (const auto &route : ways) {
-        if (count >= NUM_WAYS) {
-            break;
-        }
-        ++count;
-        storedRoutes_[route.first] = route.second;
-    }
+    // size_t count = 0;
+    // for (const auto &route : ways) {
+    //     if (count >= NUM_WAYS) {
+    //         break;
+    //     }
+    //     ++count;
+    //     storedRoutes_[route.first] = route.second;
+    // }
 
     // Take all ways
-    // storedRoutes_ = ways;
+    storedRoutes_ = ways;
     // storedAreas_ = areas;
 
     // add the boundary with fake id==42
@@ -213,9 +214,9 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
         vertices.push_back(nC[0]);
         vertices.push_back(nC[1]);
         vertices.push_back(nC[2]);
-        nC[0] *= 0.5f;
-        nC[1] *= 0.5f;
-        nC[2] *= 0.5f;
+        // nC[0] *= 0.5f;
+        // nC[1] *= 0.5f;
+        // nC[2] *= 0.5f;
     }
 
     // Add all vertices of the current line strip
@@ -274,6 +275,19 @@ void OpenGLCanvas::UpdateBuffersFromRoutes() {
         const auto &color = HIGHWAY2COLOR.count(highwayType) ? HIGHWAY2COLOR.at(highwayType) : DEFAULT_COLOR;
         AddLineStripAdjacencyToBuffers(coords.nodes, color, vertices, indices);
     }
+
+    // std::cout << "Vertices count: " << vertices.size() / VERTEX_SIZE << std::endl;
+    // constexpr auto max_precision = std::numeric_limits<float>::max_digits10;
+    // for (size_t i = 0; i < vertices.size(); i += 5) {
+    //     std::cout << std::setprecision(max_precision) << "\t" << i / VERTEX_SIZE << ": " << vertices[i] << ","
+    //               << vertices[i + 1] << std::endl;
+    // }
+
+    // std::cout << "Indices count: " << indices.size() << std::endl;
+    // for (size_t i = 0; i < indices.size(); ++i) {
+    //     std::cout << "," << indices[i];
+    // }
+    // std::cout << std::endl;
 
     inputIndexCount_ = static_cast<GLsizei>(indices.size());
     outputVertexCount_ = inputIndexCount_ * 2;
@@ -517,42 +531,44 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
     glUseProgram(display_program_);
     glUniform2f(glGetUniformLocation(display_program_, "uScreenSize"), (float)size.x, (float)size.y);
     glBindVertexArray(output_vao_);
-    // glEnable(GL_PRIMITIVE_RESTART);
-    // glPrimitiveRestartIndex(0xFFFFFFFF);
+    glEnable(GL_PRIMITIVE_RESTART);
+    glPrimitiveRestartIndex(0xFFFFFFFF);
     glDrawElements(GL_TRIANGLE_STRIP, outputIndexCount_, GL_UNSIGNED_INT, 0);
-    // glDisable(GL_PRIMITIVE_RESTART);
+    glDisable(GL_PRIMITIVE_RESTART);
     glBindVertexArray(0);
 
     SwapBuffers();
 
-    static bool shown = false;
-    if (!shown) {
-        shown = true;
-        // Debug: print out the contents of output_vbo_
-        OutputVertex *outputVertices = new OutputVertex[outputVertexCount_];
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_vbo_);
-        glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, outputVertexCount_ * sizeof(OutputVertex), outputVertices);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    // static bool shown = false;
+    // if (!shown) {
+    //     shown = true;
+    //     // Debug: print out the contents of output_vbo_
+    //     OutputVertex *outputVertices = new OutputVertex[outputVertexCount_];
+    //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_vbo_);
+    //     glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, outputVertexCount_ * sizeof(OutputVertex), outputVertices);
+    //     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-        std::cout << "Output VBO Contents: count=" << outputVertexCount_ << std::endl;
-        for (size_t i = 0; i < outputVertexCount_; ++i) {
-            std::cout << "  Vertex " << i << ": x=" << outputVertices[i].x << ", y=" << outputVertices[i].y
-                      << ", r=" << outputVertices[i].r << ", g=" << outputVertices[i].g << ", b=" << outputVertices[i].b
-                      << ", a=" << outputVertices[i].a << std::endl;
-        }
-        delete[] outputVertices;
+    //     std::cout << "Output VBO Contents: count=" << outputVertexCount_ << std::endl;
+    //     constexpr auto max_precision = std::numeric_limits<float>::max_digits10;
+    //     for (size_t i = 0; i < outputVertexCount_; ++i) {
+    //         std::cout << std::setprecision(max_precision) << "  Vertex " << i << ": x=" << outputVertices[i].x
+    //                   << ", y=" << outputVertices[i].y << ", r=" << outputVertices[i].r << ", g=" <<
+    //                   outputVertices[i].g
+    //                   << ", b=" << outputVertices[i].b << ", a=" << outputVertices[i].a << std::endl;
+    //     }
+    //     delete[] outputVertices;
 
-        GLuint *outputIndices = new GLuint[outputIndexCount_];
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, output_ebo_);
-        glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, outputIndexCount_ * sizeof(GLuint), outputIndices);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    //     GLuint *outputIndices = new GLuint[outputIndexCount_];
+    //     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, output_ebo_);
+    //     glGetBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, outputIndexCount_ * sizeof(GLuint), outputIndices);
+    //     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-        std::cout << "Output EBO Contents: count=" << outputIndexCount_ << std::endl;
-        for (size_t i = 0; i < outputIndexCount_; ++i) {
-            std::cout << "  Index " << i << ": " << outputIndices[i] << std::endl;
-        }
-        delete[] outputIndices;
-    }
+    //     std::cout << "Output EBO Contents: count=" << outputIndexCount_ << std::endl;
+    //     for (size_t i = 0; i < outputIndexCount_; ++i) {
+    //         std::cout << "  Index " << i << ": " << outputIndices[i] << std::endl;
+    //     }
+    //     delete[] outputIndices;
+    // }
 
     // Update FPS counters and draw overlay text
     ++framesSinceLastFps_;

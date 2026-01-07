@@ -56,11 +56,11 @@ InputVertex fetchVertex(uint index) {
 }
 
 uint getIndex(uint id) {
-  if(id >= (uNumIndices - 1)) return INVALID_IDX;
+  if(id >= uNumIndices) return INVALID_IDX;
   return indices[id] >> 1;
 }
 bool isEnd(uint id) {
-  if(id >= (uNumIndices - 1)) return true;
+  if(id >= uNumIndices) return true;
   return (indices[id] & 0x1) == 1;
 }
 
@@ -110,7 +110,7 @@ void main() {
     outputVertices[idx * 2 + 1].color = color;
 
     uint base = id * 6;
-    if (!endPt) { // && idx != INVALID_IDX && idxNext != INVALID_IDX) {
+    if (!endPt && idxNext != INVALID_IDX) {
         outputIndices[base + 0] = idx * 2;
         outputIndices[base + 1] = idx * 2 + 1;
         outputIndices[base + 2] = idxNext * 2;
@@ -118,11 +118,11 @@ void main() {
         outputIndices[base + 4] = idx * 2 + 1;
         outputIndices[base + 5] = idxNext * 2 + 1;
     } else {
-        outputIndices[base + 0] = idx * 2;
-        outputIndices[base + 1] = idx * 2;
-        outputIndices[base + 2] = idx * 2;
-        outputIndices[base + 3] = idx * 2;
-        outputIndices[base + 4] = idx * 2;
-        outputIndices[base + 5] = idx * 2;
+        outputIndices[base + 0] = INVALID_IDX;
+        outputIndices[base + 1] = INVALID_IDX;
+        outputIndices[base + 2] = INVALID_IDX;
+        outputIndices[base + 3] = INVALID_IDX;
+        outputIndices[base + 4] = INVALID_IDX;
+        outputIndices[base + 5] = INVALID_IDX;
     }
 }
