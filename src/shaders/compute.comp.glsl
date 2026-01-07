@@ -79,44 +79,42 @@ void main() {
     vec2 p = mapToScreen(v.lon, v.lat);
     vec4 color = vec4(v.r, v.g, v.b, 1.0);
 
-    vec2 normal = vec2(0.0, 1.0);
-    vec2 p_prev = p;
-    vec2 p_next = p;
-    
     vec2 dir = vec2(0.0);
-
     if (idxPrev != INVALID_IDX) {
         InputVertex v_prev = fetchVertex(idxPrev);
-        p_prev = mapToScreen(v_prev.lon, v_prev.lat);
+        vec2 p_prev = mapToScreen(v_prev.lon, v_prev.lat);
         dir += normalize(p - p_prev);
     }
     if (idxNext != INVALID_IDX) {
         InputVertex v_next = fetchVertex(idxNext);
-        p_next = mapToScreen(v_next.lon, v_next.lat);
+        vec2 p_next = mapToScreen(v_next.lon, v_next.lat);
         dir += normalize(p_next - p);
     }
 
+    vec2 normal = vec2(0.0);
     if (length(dir) > 0.0) {
         dir = normalize(dir);
         normal = vec2(-dir.y, dir.x);
     }
 
     float halfWidth = uWidth * 0.5;
-    outputVertices[idx * 2].pos = p + normal * halfWidth;
-    outputVertices[idx * 2]._pad = vec2(0.0);
-    outputVertices[idx * 2].color = color;
-    outputVertices[idx * 2 + 1].pos = p - normal * halfWidth;
-    outputVertices[idx * 2 + 1]._pad = vec2(0.0);
-    outputVertices[idx * 2 + 1].color = color;
+    uint vertIdx = id * 2;
+    outputVertices[vertIdx].pos = p + normal * halfWidth;
+    outputVertices[vertIdx]._pad = vec2(0.0);
+    outputVertices[vertIdx].color = vec4(normal, 0.0, 1.0); // color;
+    outputVertices[vertIdx + 1].pos = p - normal * halfWidth;
+    outputVertices[vertIdx + 1]._pad = vec2(0.0);
+    outputVertices[vertIdx + 1].color = vec4(abs(normal), 0.0, 1.0); // color;
 
     uint base = id * 6;
-    if (!endPt && idxNext != INVALID_IDX) {
-        outputIndices[base + 0] = idx * 2;
-        outputIndices[base + 1] = idx * 2 + 1;
-        outputIndices[base + 2] = idxNext * 2;
-        outputIndices[base + 3] = idxNext * 2;
-        outputIndices[base + 4] = idx * 2 + 1;
-        outputIndices[base + 5] = idxNext * 2 + 1;
+    if (!(endPt || idxNext == INVALID_IDX)) {
+        uint nextVertIdx = idxNext * 2;
+        outputIndices[base + 0] = vertIdx;
+        outputIndices[base + 1] = vertIdx + 1;
+        outputIndices[base + 2] = nextVertIdx;
+        outputIndices[base + 3] = nextVertIdx;
+        outputIndices[base + 4] = vertIdx + 1;
+        outputIndices[base + 5] = nextVertIdx + 1;
     } else {
         outputIndices[base + 0] = INVALID_IDX;
         outputIndices[base + 1] = INVALID_IDX;
