@@ -57,11 +57,16 @@ InputVertex fetchVertex(uint index) {
 
 uint getIndex(uint id) {
   if(id >= uNumIndices) return INVALID_IDX;
-  return indices[id] >> 1;
+  return indices[id] >> 2;
+}
+
+bool isBeginning(uint id) {
+  if(id >= uNumIndices) return true;
+  return (indices[id] & 0x1) == 0x1;
 }
 bool isEnd(uint id) {
   if(id >= uNumIndices) return true;
-  return (indices[id] & 0x1) == 1;
+  return (indices[id] & 0x2) == 0x2;
 }
 
 void main() {
@@ -69,26 +74,25 @@ void main() {
     if (id >= uNumIndices) return;
 
     uint idx = getIndex(id);
-    // determine if this is the end of a strip
+    // determine if this point is the beginning or end of a strip
+    const bool beginPt = isBeginning(id);
     const bool endPt = isEnd(id);
 
-    uint idxPrev = getIndex(id-1);
-    uint idxNext = getIndex(id+1);
-    
     InputVertex v = fetchVertex(idx);
     vec2 p = mapToScreen(v.lon, v.lat);
-    vec4 color = vec4(v.r, v.g, v.b, 1.0);
 
     vec2 dir = vec2(0.0);
-    if (idxPrev != INVALID_IDX) {
+    if (!beginPt) {
+        uint idxPrev = getIndex(id-1);
         InputVertex v_prev = fetchVertex(idxPrev);
         vec2 p_prev = mapToScreen(v_prev.lon, v_prev.lat);
-        dir += normalize(p - p_prev);
+        dir += normalize((p - p_prev));
     }
-    if (idxNext != INVALID_IDX) {
+    if (!endPt) {    
+        uint idxNext = getIndex(id+1);
         InputVertex v_next = fetchVertex(idxNext);
         vec2 p_next = mapToScreen(v_next.lon, v_next.lat);
-        dir += normalize(p_next - p);
+        dir += normalize((p_next - p));
     }
 
     vec2 normal = vec2(0.0);
@@ -97,17 +101,22 @@ void main() {
         normal = vec2(-dir.y, dir.x);
     }
 
+    vec4 color = vec4(v.r, v.g, v.b, 1.0);
+    // vec4 color = vec4(abs(normal), 0.0, 1.0); // color;
+    // vec4 color = vec4(beginPt?0.0:1.0, endPt?0.0:1.0, 0.0, 1.0);
+
     float halfWidth = uWidth * 0.5;
     uint vertIdx = id * 2;
     outputVertices[vertIdx].pos = p + normal * halfWidth;
     outputVertices[vertIdx]._pad = vec2(0.0);
-    outputVertices[vertIdx].color = vec4(normal, 0.0, 1.0); // color;
+    outputVertices[vertIdx].color = color;
     outputVertices[vertIdx + 1].pos = p - normal * halfWidth;
     outputVertices[vertIdx + 1]._pad = vec2(0.0);
-    outputVertices[vertIdx + 1].color = vec4(abs(normal), 0.0, 1.0); // color;
+    outputVertices[vertIdx + 1].color = color;
 
     uint base = id * 6;
-    if (!(endPt || idxNext == INVALID_IDX)) {
+    if (!endPt) {
+        uint idxNext = getIndex(id+1);
         uint nextVertIdx = idxNext * 2;
         outputIndices[base + 0] = vertIdx;
         outputIndices[base + 1] = vertIdx + 1;

@@ -160,7 +160,7 @@ void OpenGLCanvas::SetData(const OSMLoader::OSMData &data, const osmium::Box &bo
     //     }
     // }
 
-    // // take first N ways
+    // take first N ways
     // size_t count = 0;
     // for (const auto &route : ways) {
     //     if (count >= NUM_WAYS) {
@@ -222,11 +222,15 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
     // Add all vertices of the current line strip
     const GLuint endVertexIdx = static_cast<GLuint>(vertices.size() / VERTEX_SIZE);
     for (GLuint ii = base; ii < endVertexIdx; ++ii) {
-        // Set bottom most bit if last
-        GLuint idx = ii << 1;
-        if (ii + 1 == endVertexIdx) {
-            // set top bit
+        // Set bottom most bits if first or last
+        GLuint idx = ii << 2;
+        if (ii == base) {
+            // set begin bit
             idx = idx | 0x1;
+        }
+        if (ii + 1 == endVertexIdx) {
+            // set end bit
+            idx = idx | 0x2;
         }
 
         indices.push_back(idx);
@@ -486,12 +490,12 @@ void OpenGLCanvas::OnPaint(wxPaintEvent &WXUNUSED(event)) {
 
     SetCurrent(*openGLContext_);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // glEnable(GL_BLEND);
+    // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     float clearColor = 0.87f;
-    glClearColor(clearColor, clearColor, clearColor, 0.5f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClearColor(clearColor, clearColor, clearColor, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT); // | GL_DEPTH_BUFFER_BIT);
 
     auto size = GetClientSize() * GetContentScaleFactor();
     wxPoint bottomLeft{};
