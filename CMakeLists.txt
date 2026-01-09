@@ -155,7 +155,7 @@ function(stringify_shaders CS_FILE VS_FILE FS_FILE)
   add_custom_command(
       OUTPUT ${CONFIG_OUT_FILE}
       COMMAND ${CMAKE_COMMAND} -DVS_FILE=${VS_FILE} -DCS_FILE=${CS_FILE} -DFS_FILE=${FS_FILE} -DIN_FILE=${CONFIG_IN_FILE} -DOUT_FILE=${CONFIG_OUT_FILE} -P ${CMAKE_CURRENT_SOURCE_DIR}/generate_shaders.cmake
-      DEPENDS ${CONFIG_IN_FILE} ${VS_FILE} ${GS_FILE} ${FS_FILE}
+      DEPENDS ${CONFIG_IN_FILE} ${VS_FILE} ${CS_FILE} ${FS_FILE}
       COMMENT "Generating shaders.h file..."
   )
     
