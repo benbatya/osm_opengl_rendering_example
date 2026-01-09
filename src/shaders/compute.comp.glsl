@@ -60,13 +60,16 @@ uint getIndex(uint id) {
   return indices[id] >> 2;
 }
 
+const uint BEGIN_BIT = 1 << 0;
+const uint END_BIT = 1 << 1;
+
 bool isBeginning(uint id) {
   if(id >= uNumIndices) return true;
-  return (indices[id] & 0x1) == 0x1;
+  return (indices[id] & BEGIN_BIT) == BEGIN_BIT;
 }
 bool isEnd(uint id) {
   if(id >= uNumIndices) return true;
-  return (indices[id] & 0x2) == 0x2;
+  return (indices[id] & END_BIT) == END_BIT;
 }
 
 void main() {

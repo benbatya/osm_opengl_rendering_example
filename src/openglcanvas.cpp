@@ -226,11 +226,11 @@ void OpenGLCanvas::AddLineStripAdjacencyToBuffers(const OSMLoader::Coordinates &
         GLuint idx = ii << 2;
         if (ii == base) {
             // set begin bit
-            idx = idx | 0x1;
+            idx = idx | 1 << 0;
         }
         if (ii + 1 == endVertexIdx) {
             // set end bit
-            idx = idx | 0x2;
+            idx = idx | 1 << 1;
         }
 
         indices.push_back(idx);
