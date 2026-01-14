@@ -50,9 +50,18 @@ https://osmcode.org/libosmium/manual.html#dependencies
 
 The repo already includes CPM-based dependency provisioning in the CMake configuration used during configure/build.
 
-## Export
+## Export Examples
+# SF Marina
+Goto https://www.openstreetmap.org/export#map=17/37.804079/-122.428572 and click "Export".
+Save the file to maps/sf_marina.osm 
+
+The <COORDINATES> are `-122.436994,37.800214,-122.420150,37.807945` .
+
+# Sausalito
 Goto https://www.openstreetmap.org/export#map=16/37.85146/-122.48406 and click "Export"
-This will save a file named map.osm to the Downloads/ folder.
+Save the file to maps/sausalito.osm 
+
+The <COORDINATES> are `-122.50035,37.84373,-122.46780,37.85918` .
 
 ## Build
 
@@ -70,7 +79,10 @@ This produces the executable `build/main`.
 Run the program with a path to an OSM XML file. Example:
 
 ```bash
-./build/main ~/Downloads/map.osm
+./build/main maps/sf_marina.osm --coords=-122.436994,37.800214,-122.420150,37.807945
+
+./build/main maps/sausalito.osm --coords=-122.50035,37.84373,-122.46780,37.85918
+
 ```
 
 You should see an OpenGL window rendering the map ways similar to the screenshot above.

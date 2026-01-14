@@ -27,6 +27,7 @@ class MyApp : public wxApp {
 
   protected:
     wxString osmDataFilePath_{};
+    osmium::Box bounds_{};
     MyFrame *frame_{nullptr};
     std::shared_ptr<OSMLoader> osmLoader_{nullptr};
 };
@@ -34,7 +35,7 @@ class MyApp : public wxApp {
 class MyFrame : public wxFrame {
   public:
     MyFrame(const wxString &title);
-    bool initialize(const std::shared_ptr<OSMLoader> &osmLoader);
+    bool initialize(const std::shared_ptr<OSMLoader> &osmLoader, const osmium::Box &bounds);
     bool BuildShaderProgram();
 
   protected:
@@ -57,7 +58,7 @@ bool MyApp::OnInit() {
     osmLoader_->setFilepath(osmDataFilePath_.ToStdString());
 
     frame_ = new MyFrame("OpenStreetMap: " + osmDataFilePath_);
-    if (!frame_->initialize(osmLoader_)) {
+    if (!frame_->initialize(osmLoader_, bounds_)) {
         return false;
     }
     frame_->Show(true);
@@ -69,7 +70,11 @@ void MyApp::OnInitCmdLine(wxCmdLineParser &parser) {
     wxApp::OnInitCmdLine(parser);
 
     static const wxCmdLineEntryDesc cmdLineDesc[] = {
-        {wxCMD_LINE_PARAM, NULL, NULL, "Input OSM datafile", wxCMD_LINE_VAL_STRING}, {wxCMD_LINE_NONE}};
+        {wxCMD_LINE_PARAM, NULL, NULL, "Input OSM datafile", wxCMD_LINE_VAL_STRING},
+        {wxCMD_LINE_OPTION, "c", "coordinates", "Coordinate boundary of input map", wxCMD_LINE_VAL_STRING,
+         wxCMD_LINE_OPTION_MANDATORY},
+        {wxCMD_LINE_NONE},
+    };
 
     parser.SetDesc(cmdLineDesc);
 }
@@ -84,12 +89,29 @@ bool MyApp::OnCmdLineParsed(wxCmdLineParser &parser) {
         return false;
     }
 
+    wxString boundsStr;
+    if (!parser.Found("coordinates", &boundsStr)) {
+        return false;
+    }
+
+    double minLon{0.0};
+    double minLat{0.0};
+    double maxLon{0.0};
+    double maxLat{0.0};
+
+    if (sscanf(boundsStr.mb_str().data(), "%lf,%lf,%lf,%lf", &minLon, &minLat, &maxLon, &maxLat) != 4) {
+        wxLogError("Invalid coordinate boundary format. Expected 'minLon,minLat,maxLon,maxLat'.");
+        return false;
+    }
+
+    bounds_ = osmium::Box({minLon, minLat}, {maxLon, maxLat});
+
     return true;
 }
 
 MyFrame::MyFrame(const wxString &title) : wxFrame(nullptr, wxID_ANY, title) {}
 
-bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
+bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader, const osmium::Box &bounds) {
     osmLoader_ = osmLoader;
 
     wxGLAttributes vAttrs;
@@ -109,8 +131,10 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
 
     this->Bind(wxEVT_SIZE, &MyFrame::OnSize, this);
 
+    // Sausalito
     // const auto bounds = osmium::Box({-122.50035, 37.84373}, {-122.46780, 37.85918});
-    const auto bounds = osmium::Box({-122.436994, 37.800214}, {-122.420150, 37.807945});
+    // SF Marina
+    // const auto bounds = osmium::Box({-122.436994, 37.800214}, {-122.420150, 37.807945});
 
     auto data = osmLoader_->getData(bounds);
     if (!data) {
