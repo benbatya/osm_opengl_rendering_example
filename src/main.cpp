@@ -109,7 +109,8 @@ bool MyFrame::initialize(const std::shared_ptr<OSMLoader> &osmLoader) {
 
     this->Bind(wxEVT_SIZE, &MyFrame::OnSize, this);
 
-    const auto bounds = osmium::Box({-122.50035, 37.84373}, {-122.46780, 37.85918});
+    // const auto bounds = osmium::Box({-122.50035, 37.84373}, {-122.46780, 37.85918});
+    const auto bounds = osmium::Box({-122.436994, 37.800214}, {-122.420150, 37.807945});
 
     auto data = osmLoader_->getData(bounds);
     if (!data) {
