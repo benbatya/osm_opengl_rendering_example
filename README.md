@@ -6,7 +6,11 @@ Renders OpenStreetMap (OSM) ways tagged as highways using OpenGL geometry shader
 
 This small demo parses an OSM XML file and renders the ways that are tagged with `highway` using Compute Shaders. The
 implementation is focused on demonstrating how to render large vector map datasets on the GPU efficiently using
-OpenGL (the same infrastructure available on many mobile GPUs). A Compute Shader is used to extrude the way data to triangulated meshes and then a simple vertex and fragment shader is used to render them. The Compute Shader runs in a fully parallel manner to ensure maximum performance.
+OpenGL (the same infrastructure available on many mobile GPUs). Osmium is used to select and load ways and nodes of interest in an efficient manner. Then a compute shader is used to extrude the ways to triangulated meshes. Finally, a simple shader program is used to render the meshes. 
+
+# Optimizations of Note
+* The Compute Shader runs in a fully parallel manner to ensure maximum performance.
+* Way data is first loaded to identify which nodes are relevent and then only those nodes are loaded. This eliminates unnesessary data from being loaded and later filtered out.
 
 **Quick summary:**
 - **Input:** an OSM XML file exported from OpenStreetMap
