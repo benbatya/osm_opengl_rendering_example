@@ -4,9 +4,9 @@ Renders OpenStreetMap (OSM) ways tagged as highways using OpenGL geometry shader
 
 [![Example](/usage.png)](https://youtu.be/3e60l875eQU)
 
-This small demo parses an OSM XML file and renders the ways that are tagged with `highway` using Geometry Shaders. The
+This small demo parses an OSM XML file and renders the ways that are tagged with `highway` using Compute Shaders. The
 implementation is focused on demonstrating how to render large vector map datasets on the GPU efficiently using
-OpenGL (the same infrastructure available on many mobile GPUs). A Vulkan port could be added later if desired.
+OpenGL (the same infrastructure available on many mobile GPUs). A Compute Shader is used to extrude the way data to triangulated meshes and then a simple vertex and fragment shader is used to render them. The Compute Shader runs in a fully parallel manner to ensure maximum performance.
 
 **Quick summary:**
 - **Input:** an OSM XML file exported from OpenStreetMap
@@ -93,6 +93,11 @@ You should see an OpenGL window rendering the map ways similar to the screenshot
 	geometry shader usage with large vector data.
 - The code has been built and run on Ubuntu; platform differences (X11/Wayland/Windows/macOS) may require different
 	development packages or small build tweaks.
+
+## Future improvements:
+* preprocess the ways to lines following https://www.youtube.com/watch?v=Z-YLPoKm0Mk and extrude the intersections
+* Dynamically fetch map data following [Overpass](https://tchayen.github.io/posts/fetching-data-from-the-open-street-maps) and display that instead of manual export
+* Render the areas to see their shapes beneath the ways.
 
 ## License
 
